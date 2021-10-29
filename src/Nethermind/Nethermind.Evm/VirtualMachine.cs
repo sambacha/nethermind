@@ -2722,7 +2722,9 @@ namespace Nethermind.Evm
                             BugOracle.LastSStorePC = programCounter - 1;
 
                             // Manticore checks whether an SSTORE instruction comes after an external call.
-                            if (BugOracle.HadExternCall)
+                            // Note that we also consider whether the CALL and SSTORE occur in the same depth.
+                            // This is to align the oracle more precisely to the behavior of Manticore.
+                            if (BugOracle.DepthsWithExternCall.Contains(env.CallDepth))
                             {
                                 BugSet.Add((BugClass.ReentrancyManticore, programCounter - 1));
                             }
@@ -3458,7 +3460,7 @@ namespace Nethermind.Evm
                             // Manticore checks the gaslimit and whether the destination is controllable or equal to the sender.
                             if (instruction == Instruction.CALL && gasLimit > 2300 && (IsUser(codeSource) || codeSource == env.Sender))
                             {
-                                BugOracle.HadExternCall = true;
+                                BugOracle.DepthsWithExternCall.Add(env.CallDepth);
                             }
 
                             // Raise a BD alarm if ether send is directly or indirectly affected by the block state.

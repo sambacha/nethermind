@@ -36,7 +36,7 @@ namespace Nethermind.Evm {
         public int LastSendPC = -1; // ILF
         public int LastSStorePC = -1; // ILF
         public HashSet<int>CyclicCallPCs = new HashSet<int>(); // sFuzz
-        public bool HadExternCall = false; // Manticore
+        public HashSet<int>DepthsWithExternCall = new HashSet<int>();
 
         public void AddVarsUsedForCall(HashSet<UInt256> vars, Address callAddr)
         {
@@ -101,7 +101,7 @@ namespace Nethermind.Evm {
             CyclicCallPCs.Clear();
             LastSendPC = -1;
             LastSStorePC = -1;
-            HadExternCall = false;
+            DepthsWithExternCall.Clear();
         }
     }
 }
