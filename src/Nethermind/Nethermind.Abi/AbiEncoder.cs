@@ -32,13 +32,12 @@ namespace Nethermind.Abi
         Packed = 2,
         All = 3
     }
-    
+
     public class AbiEncoder : IAbiEncoder
     {
         public byte[] Encode(AbiEncodingStyle encodingStyle, AbiSignature signature, params object[] arguments)
         {
             bool packed = (encodingStyle & AbiEncodingStyle.Packed) == AbiEncodingStyle.Packed;
-            
             List<byte[]> dynamicParts = new List<byte[]>();
             List<byte[]> headerParts = new List<byte[]>();
             BigInteger currentOffset = arguments.Length * AbiType.UInt256.LengthInBytes;
@@ -61,7 +60,7 @@ namespace Nethermind.Abi
             bool includeSig = encodingStyle == AbiEncodingStyle.IncludeSignature;
             int sigOffset = includeSig ? 1 : 0;
             byte[][] encodedParts = new byte[sigOffset + headerParts.Count + dynamicParts.Count][];
-            
+
             if (includeSig)
             {
                 encodedParts[0] = ComputeAddress(signature);
@@ -108,10 +107,10 @@ namespace Nethermind.Abi
 
         public object[] Decode(AbiEncodingStyle encodingStyle, AbiSignature signature, byte[] data)
         {
-            bool packed = (encodingStyle & AbiEncodingStyle.Packed) == AbiEncodingStyle.Packed; 
+            bool packed = (encodingStyle & AbiEncodingStyle.Packed) == AbiEncodingStyle.Packed;
             bool includeSig = encodingStyle == AbiEncodingStyle.IncludeSignature;
             int sigOffset = includeSig ? 4 : 0;
-            
+
             string[] argTypeNames = new string[signature.Types.Length];
             for (int i = 0; i < signature.Types.Length; i++)
             {
@@ -154,6 +153,61 @@ namespace Nethermind.Abi
             }
 
             return arguments;
+        }
+
+        private static AbiType parseTypeStr(string typeStr)
+        {
+            if (typeStr.Contains("[") && typeStr.Contains("]")) {
+                int idxOpen = typeStr.LastIndexOf("[");
+                int idxClose = typeStr.LastIndexOf("]");
+                int sizeLen = typeStr.Length - idxOpen - 2;
+                string sizeStr = typeStr.Substring(idxOpen + 1, sizeLen).Trim();
+                string remainStr1 = typeStr.Substring(0, idxOpen);
+                string remainStr2 = typeStr.Substring(idxClose + 1);
+                string remainStr = remainStr1 + remainStr2;
+                if (sizeStr == "") {
+                    return new AbiArray(parseTypeStr(remainStr));
+                }
+                else {
+                    int size = Int32.Parse(sizeStr);
+                    return new AbiFixedLengthArray(parseTypeStr(remainStr), size);
+                }
+            }
+            else if (typeStr == "uint") return AbiType.UInt256;
+            else if (typeStr.StartsWith("uint")) {
+                int size = Int32.Parse(typeStr.Substring(4));
+                return new AbiUInt(size);
+            }
+            else if (typeStr == "int") return AbiType.Int256;
+            else if (typeStr.StartsWith("int")) {
+                int size = Int32.Parse(typeStr.Substring(3));
+                return new AbiInt(size);
+            }
+            else if (typeStr == "address") return AbiType.Address;
+            else if (typeStr == "bool") return AbiType.Bool;
+            else if (typeStr == "bytes") return AbiType.DynamicBytes;
+            else if (typeStr.StartsWith("bytes")) {
+                int size = Int32.Parse(typeStr.Substring(5));
+                return new AbiBytes(size);
+            }
+            else if (typeStr == "function") return AbiType.Function;
+            else if (typeStr == "string") return AbiType.String;
+            // tuple
+            // fixed, ufixed
+            return AbiType.Address;
+        }
+
+        private AbiType[] getAbiTypeArr(List<string> argTypes)
+        {
+            List<AbiType> typeName = new List<AbiType>();
+            foreach(string arg in argTypes) typeName.Add(parseTypeStr(arg));
+            return typeName.ToArray();
+        }
+
+        public AbiSignature getSignature(string funcName, List<string> argTypes)
+        {
+            AbiType[] abiTypes = getAbiTypeArr(argTypes);
+            return new AbiSignature(funcName, abiTypes);
         }
     }
 }

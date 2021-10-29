@@ -16,12 +16,15 @@
  * along with the Nethermind. If not, see <http://www.gnu.org/licenses/>.
  */
 
+using System.Collections.Generic;
+
 namespace Nethermind.Abi
 {
     public interface IAbiEncoder
     {
         byte[] Encode(AbiEncodingStyle encodingStyle, AbiSignature signature, params object[] arguments);
-        
+
         object[] Decode(AbiEncodingStyle encodingStyle, AbiSignature signature, byte[] data);
+        AbiSignature getSignature(string funcName, List<string> argTypes);
     }
 }
