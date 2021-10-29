@@ -23,8 +23,15 @@ namespace Nethermind.Evm.Test
 {
     public class TestBlockhashProvider : IBlockhashProvider
     {
+        private static int _maxDepth = 256;
         public Keccak GetBlockhash(BlockHeader currentBlock, in long number)
         {
+            // Copied from Nethermind.Blockchain/BlockhashProvider.cs code.
+            long current = currentBlock.Number;
+            if (number >= current || number < current - System.Math.Min(current, _maxDepth))
+            {
+                return null;
+            }
             return Keccak.Compute(number.ToString());
         }
     }
