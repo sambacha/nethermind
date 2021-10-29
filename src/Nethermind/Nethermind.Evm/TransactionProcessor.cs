@@ -238,6 +238,7 @@ namespace Nethermind.Evm
                 {
                     substate = _virtualMachine.Run(state, txTracer);
                     unspentGas = state.GasAvailable;
+                    _virtualMachine.PostprocessBugs(env);
                 }
 
                 if (substate.ShouldRevert || substate.IsError)

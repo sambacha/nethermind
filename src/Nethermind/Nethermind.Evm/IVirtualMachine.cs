@@ -25,9 +25,11 @@ namespace Nethermind.Evm
     public interface IVirtualMachine
     {
         TransactionSubstate Run(EvmState state, ITxTracer tracer);
-        
+
         [Todo(Improve.Refactor, "Remove this responsibility from VM")]
         CodeInfo GetCachedCodeInfo(Address codeSource);
+
+        void PostprocessBugs(ExecutionEnvironment env);
 
         void DisableSimdInstructions();
     }

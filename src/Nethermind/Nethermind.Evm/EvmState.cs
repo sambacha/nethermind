@@ -17,6 +17,7 @@
  */
 
 using System;
+using System.Numerics;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -74,6 +75,9 @@ namespace Nethermind.Evm
         private List<LogEntry> _logs;
         public int StackHead = 0;
 
+        public Stack<TaintInfo> TaintStack = new Stack<TaintInfo>();
+        public Dictionary<UInt256, TaintInfo> TaintMemory = new Dictionary <UInt256, TaintInfo> ();
+
         public EvmState(long gasAvailable, ExecutionEnvironment env, ExecutionType executionType, bool isPrecompile, bool isTopLevel, bool isContinuation)
             : this(gasAvailable, env, executionType, isPrecompile, isTopLevel, -1, -1, 0L, 0L, false, isContinuation)
         {
@@ -113,7 +117,7 @@ namespace Nethermind.Evm
             {
                 switch (ExecutionType)
                 {
-                    
+
                     case ExecutionType.StaticCall:
                     case ExecutionType.Call:
                     case ExecutionType.CallCode:
@@ -130,7 +134,7 @@ namespace Nethermind.Evm
         }
 
         public Address To => Env.CodeSource;
-        
+
         public ExecutionEnvironment Env { get; }
         public long GasAvailable { get; set; }
         public int ProgramCounter { get; set; }
