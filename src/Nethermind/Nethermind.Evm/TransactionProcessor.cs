@@ -78,7 +78,7 @@ namespace Nethermind.Evm
             {
                 spec = new SystemTransactionReleaseSpec(spec);
             }
-            
+
             Address recipient = transaction.To;
             UInt256 value = transaction.Value;
             UInt256 gasPrice = transaction.GasPrice;
@@ -124,7 +124,7 @@ namespace Nethermind.Evm
                 {
                     transaction.SenderAddress = _ecdsa.RecoverAddress(transaction, block.Number);
                 }
-                
+
                 if (sender != transaction.SenderAddress)
                 {
                     if(_logger.IsWarn) _logger.Warn($"TX recovery issue fixed - tx was coming with sender {sender} and the now it recovers to {transaction.SenderAddress}");
@@ -136,7 +136,7 @@ namespace Nethermind.Evm
                     if (gasPrice == UInt256.Zero)
                     {
                         _stateProvider.CreateAccount(sender, UInt256.Zero);
-                    }                    
+                    }
                 }
             }
 
@@ -150,12 +150,16 @@ namespace Nethermind.Evm
                     return;
                 }
 
+                // For smart contract testing, comment out to allow one sender
+                // to deploy more than one contract.
+                /*
                 if (transaction.Nonce != _stateProvider.GetNonce(sender))
                 {
                     TraceLogInvalidTx(transaction, $"WRONG_TRANSACTION_NONCE: {transaction.Nonce} (expected {_stateProvider.GetNonce(sender)})");
                     QuickFail(transaction, block, txTracer, readOnly);
                     return;
                 }
+                */
 
                 _stateProvider.IncrementNonce(sender);
             }
@@ -180,21 +184,35 @@ namespace Nethermind.Evm
                 if (transaction.IsContractCreation)
                 {
                     recipient = Address.OfContract(sender, _stateProvider.GetNonce(sender) - 1);
+                    if (transaction.DeployAddress != null) {
+                        if (recipient != transaction.DeployAddress)
+                        {
+                            System.Console.WriteLine("[Warning] Unexpected deployed address " + recipient.ToString() + ", forcefully set to " + transaction.DeployAddress.ToString());
+                        }
+                        recipient = transaction.DeployAddress;
+                    }
                     if (transaction.IsSystem())
                     {
                         recipient = transaction.SenderAddress;
                     }
-                    
+
                     if (_stateProvider.AccountExists(recipient))
                     {
                         if ((_virtualMachine.GetCachedCodeInfo(recipient)?.MachineCode?.Length ?? 0) != 0 || _stateProvider.GetNonce(recipient) != 0)
                         {
-                            if (_logger.IsTrace)
+                            if (sender == recipient)
                             {
-                                _logger.Trace($"Contract collision at {recipient}"); // the account already owns the contract with the code
+                                System.Console.WriteLine("[Warning] Deployed address is same to sender (" + recipient.ToString() + ")");
                             }
+                            else
+                            {
+                                if (_logger.IsTrace)
+                                {
+                                    _logger.Trace($"Contract collision at {recipient}"); // the account already owns the contract with the code
+                                }
 
-                            throw new TransactionCollisionException();
+                                throw new TransactionCollisionException();
+                            }
                         }
 
                         _stateProvider.UpdateStorageRoot(recipient, Keccak.EmptyTreeHash);

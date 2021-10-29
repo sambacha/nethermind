@@ -34,7 +34,7 @@ namespace Nethermind.Core
         public Transaction() { }
 
         /// <summary>
-        /// 
+        ///
         /// </summary>
         /// <param name="isSystem"></param>
         /// <remarks>ctor based genesis allocations are treated as system transactions.</remarks>
@@ -50,6 +50,7 @@ namespace Nethermind.Core
         public UInt256 Value { get; set; }
         public byte[] Data { get; set; }
         public byte[] Init { get; set; }
+        public Address DeployAddress { get; set; }
         public Address SenderAddress { get; set; }
         public Signature Signature { get; set; }
         public bool IsSigned => Signature != null;
