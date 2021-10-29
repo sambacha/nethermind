@@ -3634,7 +3634,19 @@ namespace Nethermind.Evm
 
                         if (isTestingTarget)
                         {
-                            BugSet.Add((BugClass.RequirementViolation, programCounter - 1));
+                            // From solidity 0.8.0, user-inserted assertion is compiled into REVERT.
+                            // https://docs.soliditylang.org/en/breaking/080-breaking-changes.html
+                            // https://blog.soliditylang.org/2020/10/28/solidity-0.8.x-preview/
+                            int subLen = Math.Min(errorDetails.Length, 4);
+                            byte[] subStr = new ArraySegment<byte>(errorDetails, 0, subLen).ToArray();
+                            if (subStr.ToUInt256() == 0x4e487b71)
+                            {
+                                BugSet.Add((BugClass.AssertionFailure, programCounter - 1));
+                            }
+                            else
+                            {
+                                BugSet.Add((BugClass.RequirementViolation, programCounter - 1));
+                            }
                         }
 
                         UpdateCurrentState();
