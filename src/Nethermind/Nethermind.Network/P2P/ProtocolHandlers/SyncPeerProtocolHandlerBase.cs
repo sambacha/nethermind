@@ -202,7 +202,9 @@ namespace Nethermind.Network.P2P.ProtocolHandlers
             msg.Reverse = 0;
             msg.Skip = 0;
 
+            Logger.Info($"DEBUGGING SENDING get HEAD block header, hash: {msg.StartBlockHash}");
             BlockHeader[] headers = await SendRequest(msg, token);
+            Logger.Info($"DEBUGGING RECEIVED HEAD block header? length: {headers.Length}, hash: {headers.FirstOrDefault().Hash}");
             return headers.Length > 0 ? headers[0] : null;
         }
 
