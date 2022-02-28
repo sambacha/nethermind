@@ -211,15 +211,12 @@ namespace Nethermind.Network.P2P.Subprotocols.Eth.V66
 
         protected override async Task<BlockHeader[]> SendRequest(V62.Messages.GetBlockHeadersMessage message, CancellationToken token)
         {
-            if (Logger.IsTrace)
-            {
-                Logger.Trace($"Sending headers request to {Session.Node:c}:");
-                Logger.Trace($"  Starting blockhash: {message.StartBlockHash}");
-                Logger.Trace($"  Starting number: {message.StartBlockNumber}");
-                Logger.Trace($"  Skip: {message.Skip}");
-                Logger.Trace($"  Reverse: {message.Reverse}");
-                Logger.Trace($"  Max headers: {message.MaxHeaders}");
-            }
+            Logger.Info($"Sending headers request to {Session.Node:c}:");
+            Logger.Info($"  Starting blockhash: {message.StartBlockHash}");
+            Logger.Info($"  Starting number: {message.StartBlockNumber}");
+            Logger.Info($"  Skip: {message.Skip}");
+            Logger.Info($"  Reverse: {message.Reverse}");
+            Logger.Info($"  Max headers: {message.MaxHeaders}");
         
             GetBlockHeadersMessage msg66 = new() {EthMessage = message};
             Request<GetBlockHeadersMessage, BlockHeader[]> request = new(msg66);

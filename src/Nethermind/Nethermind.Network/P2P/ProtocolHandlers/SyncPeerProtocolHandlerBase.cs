@@ -152,21 +152,20 @@ namespace Nethermind.Network.P2P.ProtocolHandlers
             msg.Skip = skip;
             msg.StartBlockNumber = number;
 
+            Logger.Info($"DEBUGGING SENDING get {msg.MaxHeaders} headers from number: {msg.StartBlockNumber}");
             BlockHeader[] headers = await SendRequest(msg, token);
+            Logger.Info($"DEBUGGING RECEIVED {headers.Length} headers from ask: get {msg.MaxHeaders} headers from number: {msg.StartBlockNumber}");
             return headers;
         }
 
         protected virtual async Task<BlockHeader[]> SendRequest(GetBlockHeadersMessage message, CancellationToken token)
         {
-            if (Logger.IsTrace)
-            {
-                Logger.Trace($"Sending headers request to {Session.Node:c}:");
-                Logger.Trace($"  Starting blockhash: {message.StartBlockHash}");
-                Logger.Trace($"  Starting number: {message.StartBlockNumber}");
-                Logger.Trace($"  Skip: {message.Skip}");
-                Logger.Trace($"  Reverse: {message.Reverse}");
-                Logger.Trace($"  Max headers: {message.MaxHeaders}");
-            }
+            Logger.Info($"Sending headers request to {Session.Node:c}:");
+            Logger.Info($"  Starting blockhash: {message.StartBlockHash}");
+            Logger.Info($"  Starting number: {message.StartBlockNumber}");
+            Logger.Info($"  Skip: {message.Skip}");
+            Logger.Info($"  Reverse: {message.Reverse}");
+            Logger.Info($"  Max headers: {message.MaxHeaders}");
 
             Request<GetBlockHeadersMessage, BlockHeader[]> request = new(message);
             _headersRequests.Send(request);
