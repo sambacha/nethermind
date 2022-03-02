@@ -308,25 +308,29 @@ namespace Nethermind.Synchronization
 
         public void HintBlock(Keccak hash, long number, ISyncPeer syncPeer)
         {
+            _logger.Info($"DEBUGGING we are in HintBlock");
             if (!_syncConfig.BlockGossipEnabled) return;
             
             if (number > syncPeer.HeadNumber)
             {
-                if (_logger.IsTrace)
-                    _logger.Trace(
-                        $"HINT Updating header of {syncPeer} from {syncPeer.HeadNumber} {syncPeer.TotalDifficulty} to {number}");
+                _logger.Info($"HINT Updating header of {syncPeer} from {syncPeer.HeadNumber} {syncPeer.TotalDifficulty} to {number}");
                 syncPeer.HeadNumber = number;
                 syncPeer.HeadHash = hash;
 
                 lock (_recentlySuggested)
                 {
-                    if (_recentlySuggested.Get(hash) != null) return;
+                    if (_recentlySuggested.Get(hash) != null)
+                    {
+                        _logger.Info($"{hash} was already suggested. return");
+                        return;
+                    }
 
                     /* do not add as this is a hint only */
                 }
 
                 if (!_blockTree.IsKnownBlock(number, hash))
                 {
+                    _logger.Info($"refreshing total difficulty");
                     _pool.RefreshTotalDifficulty(syncPeer, hash);
                 }
             }

@@ -528,7 +528,7 @@ namespace Nethermind.Synchronization.Peers
         private async Task ExecuteRefreshTask(RefreshTotalDiffTask refreshTotalDiffTask, CancellationToken token)
         {
             ISyncPeer syncPeer = refreshTotalDiffTask.SyncPeer;
-            if (_logger.IsTrace) _logger.Trace($"Requesting head block info from {syncPeer.Node:s}");
+            _logger.Info($"Requesting head block info from {syncPeer.Node:s}");
 
             Task<BlockHeader?> getHeadHeaderTask = syncPeer.GetHeadBlockHeader(refreshTotalDiffTask.BlockHash ?? syncPeer.HeadHash, token);
             CancellationTokenSource delaySource = new();

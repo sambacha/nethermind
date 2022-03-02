@@ -16,6 +16,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using Nethermind.Blockchain;
 using Nethermind.Core;
 using Nethermind.Core.Crypto;
@@ -211,6 +212,7 @@ namespace Nethermind.Network.P2P.Subprotocols.Eth.V62
         private void Handle(NewBlockHashesMessage newBlockHashes)
         {
             Metrics.Eth62NewBlockHashesReceived++;
+            Logger.Info($"DEBUGGING received New Block Hashes. number: {newBlockHashes.BlockHashes.Length}, first hash: {newBlockHashes.BlockHashes.FirstOrDefault().Item1}");
             (Keccak, long)[] blockHashes = newBlockHashes.BlockHashes;
             for (int i = 0; i < blockHashes.Length; i++)
             {
