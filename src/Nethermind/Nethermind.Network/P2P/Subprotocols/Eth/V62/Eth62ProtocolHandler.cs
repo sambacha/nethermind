@@ -224,7 +224,8 @@ namespace Nethermind.Network.P2P.Subprotocols.Eth.V62
         private void Handle(NewBlockMessage msg)
         {
             Metrics.Eth62NewBlockReceived++;
-            
+            Logger.Info($"DEBUGGING received NewBlock Message. block hash: {msg.Block.Hash}");
+
             try
             {
                 msg.Block.Header.TotalDifficulty = msg.TotalDifficulty;
