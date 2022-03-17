@@ -65,7 +65,8 @@ public class JitVirtualMachine : IVirtualMachine
             Operation op = _operations[(Instruction)code[i]];
 
             // temporary
-            il.Emit(OpCodes.Ldc_I4, (int)op.StackChange);
+            CleanCurrentWord(il);
+            il.Emit(OpCodes.Ldc_I4, op.StackChange * Word.Size); // pointers require multiplication of the size
             il.Emit(OpCodes.Ldloc_1);
             il.Emit(OpCodes.Add);
             il.Emit(OpCodes.Stloc_1);
@@ -77,6 +78,12 @@ public class JitVirtualMachine : IVirtualMachine
         del();
 
         return new TransactionSubstate(EvmExceptionType.None, false);
+    }
+
+    private static void CleanCurrentWord(ILGenerator il)
+    {
+        il.Emit(OpCodes.Ldloc_1);
+        il.Emit(OpCodes.Initobj, typeof(Word));
     }
 
     public void DisableSimdInstructions()

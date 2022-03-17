@@ -31,6 +31,7 @@ public class JitVirtualMachineTests : VirtualMachineTestsBase
             .Op(Instruction.PC)
             .Op(Instruction.POP)
             .Done;
+
         TestAllTracerWithOutput result = Execute(code);
     }
 }
