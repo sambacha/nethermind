@@ -15,9 +15,22 @@
 //  along with the Nethermind. If not, see <http://www.gnu.org/licenses/>.
 // 
 
+using Nethermind.Logging;
+using NUnit.Framework;
+
 namespace Nethermind.Evm.Test;
 
 public class JitVirtualMachineTests : VirtualMachineTestsBase
 {
-    
+    protected override IVirtualMachine BuildVirtualMachine(IBlockhashProvider blockhashProvider, ILogManager logManager) => new JitVirtualMachine();
+
+    [Test]
+    public void Test()
+    {
+        byte[] code = Prepare.EvmCode
+            .Op(Instruction.PC)
+            .Op(Instruction.POP)
+            .Done;
+        TestAllTracerWithOutput result = Execute(code);
+    }
 }

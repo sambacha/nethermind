@@ -45,7 +45,7 @@ namespace Nethermind.Evm.Test
         protected ITransactionProcessor _processor;
         private IDb _stateDb;
 
-        protected VirtualMachine Machine { get; private set; }
+        protected IVirtualMachine Machine { get; private set; }
         protected IStateProvider TestState { get; private set; }
         protected IStorageProvider Storage { get; private set; }
 
@@ -79,9 +79,11 @@ namespace Nethermind.Evm.Test
             Storage = new StorageProvider(trieStore, TestState, logManager);
             _ethereumEcdsa = new EthereumEcdsa(SpecProvider.ChainId, logManager);
             IBlockhashProvider blockhashProvider = TestBlockhashProvider.Instance;
-            Machine = new VirtualMachine(blockhashProvider, SpecProvider, logManager);
+            Machine = BuildVirtualMachine(blockhashProvider, logManager);
             _processor = new TransactionProcessor(SpecProvider, TestState, Storage, Machine, logManager);
         }
+
+        protected virtual IVirtualMachine BuildVirtualMachine(IBlockhashProvider blockhashProvider, ILogManager logManager) => new VirtualMachine(blockhashProvider, SpecProvider, logManager);
 
         protected GethLikeTxTrace ExecuteAndTrace(params byte[] code)
         {
