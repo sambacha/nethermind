@@ -14,9 +14,6 @@
 //  You should have received a copy of the GNU Lesser General Public License
 //  along with the Nethermind. If not, see <http://www.gnu.org/licenses/>.
 
-using Nethermind.Core;
-using Nethermind.Core.Specs;
-using Nethermind.Evm.CodeAnalysis;
 using Nethermind.Evm.Tracing;
 using Nethermind.State;
 
@@ -25,7 +22,5 @@ namespace Nethermind.Evm
     public interface IVirtualMachine
     {
         TransactionSubstate Run(EvmState state, IWorldState worldState, ITxTracer tracer);
-        
-        CodeInfo GetCachedCodeInfo(IWorldState worldState, Address codeSource, IReleaseSpec spec);
     }
 }

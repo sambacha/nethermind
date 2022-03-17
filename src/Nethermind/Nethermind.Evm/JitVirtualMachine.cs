@@ -1,4 +1,4 @@
-﻿//  Copyright (c) 2021 Demerzel Solutions Limited
+//  Copyright (c) 2021 Demerzel Solutions Limited
 //  This file is part of the Nethermind library.
 // 
 //  The Nethermind library is free software: you can redistribute it and/or modify
@@ -15,9 +15,15 @@
 //  along with the Nethermind. If not, see <http://www.gnu.org/licenses/>.
 // 
 
+using Nethermind.Evm.Tracing;
+using Nethermind.State;
+
 namespace Nethermind.Evm;
 
-public class JitVirtualMachine
+public class JitVirtualMachine : IVirtualMachine
 {
-    
+    public TransactionSubstate Run(EvmState state, IWorldState worldState, ITxTracer tracer)
+    {
+        throw new System.NotImplementedException();
+    }
 }

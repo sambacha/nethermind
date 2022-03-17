@@ -323,7 +323,7 @@ namespace Nethermind.Evm.TransactionProcessing
                 env.ExecutingAccount = recipient;
                 env.InputData = data ?? Array.Empty<byte>();
                 env.CodeInfo = machineCode == null
-                    ? _virtualMachine.GetCachedCodeInfo(_worldState, recipient, spec)
+                    ? CodeInfoCache.GetCachedCodeInfo(_worldState, recipient, spec)
                     : new CodeInfo(machineCode);
 
                 ExecutionType executionType =
@@ -494,7 +494,7 @@ namespace Nethermind.Evm.TransactionProcessing
         {
             if (_stateProvider.AccountExists(contractAddress))
             {
-                CodeInfo codeInfo = _virtualMachine.GetCachedCodeInfo(_worldState, contractAddress, spec);
+                CodeInfo codeInfo = CodeInfoCache.GetCachedCodeInfo(_worldState, contractAddress, spec);
                 bool codeIsNotEmpty = codeInfo.MachineCode.Length != 0;
                 bool accountNonceIsNotZero = _stateProvider.GetNonce(contractAddress) != 0;
 
