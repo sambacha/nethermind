@@ -20,9 +20,9 @@ using NUnit.Framework;
 
 namespace Nethermind.Evm.Test;
 
-public class JitVirtualMachineTests : VirtualMachineTestsBase
+public class IlVirtualMachineTests : VirtualMachineTestsBase
 {
-    protected override IVirtualMachine BuildVirtualMachine(IBlockhashProvider blockhashProvider, ILogManager logManager) => new JitVirtualMachine();
+    protected override IVirtualMachine BuildVirtualMachine(IBlockhashProvider blockhashProvider, ILogManager logManager) => new IlVirtualMachine();
 
     [Test]
     public void Test()
