@@ -61,12 +61,15 @@ public class IlVirtualMachine : IVirtualMachine
         LocalBuilder stack = il.DeclareLocal(typeof(Word*));
         LocalBuilder current = il.DeclareLocal(typeof(Word*));
 
-        const int wordToAlignTo = 8;
+        const int wordToAlignTo = 32;
 
         il.Emit(OpCodes.Ldc_I4, EvmStack.MaxStackSize * Word.Size + wordToAlignTo);
         il.Emit(OpCodes.Localloc);
 
-        // align to the memory boundary, so that the Word can be written using the aligned longs.
+        // align to the boundary, so that the Word can be written using the aligned longs.
+        il.LoadValue(wordToAlignTo);
+        il.Emit(OpCodes.Conv_I);
+        il.Emit(OpCodes.Add);
         il.Emit(OpCodes.Ldc_I4, ~(wordToAlignTo - 1));
         il.Emit(OpCodes.Conv_I);
         il.Emit(OpCodes.And);
