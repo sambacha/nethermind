@@ -37,7 +37,12 @@ struct Word
     [FieldOffset(Size - sizeof(int))]
     public int Int0;
 
+    [FieldOffset(Size - sizeof(byte))]
+    public byte Byte0;
+
     public static readonly FieldInfo Int0Field = typeof(Word).GetField(nameof(Int0));
+
+    public static readonly FieldInfo Byte0Field = typeof(Word).GetField(nameof(Byte0));
 }
 
 public class IlVirtualMachine : IVirtualMachine
@@ -74,10 +79,10 @@ public class IlVirtualMachine : IVirtualMachine
         il.Emit(OpCodes.Conv_I);
         il.Emit(OpCodes.And);
 
-        il.Emit(OpCodes.Stloc_0); // store as start
+        il.Store(stack); // store as start
 
-        il.Emit(OpCodes.Ldloc_0);
-        il.Emit(OpCodes.Stloc_1); // copy to the current
+        il.Load(stack);
+        il.Store(current); // copy to the current
 
         int pc = 0;
 
@@ -92,7 +97,15 @@ public class IlVirtualMachine : IVirtualMachine
                     il.Load(current);
                     il.LoadValue(BinaryPrimitives.ReverseEndianness(pc)); // TODO: assumes little endian machine
                     il.Emit(OpCodes.Stfld, Word.Int0Field);
-                    il.BumpUpStack(current);
+                    il.StackUp(current);
+                    break;
+                case Instruction.PUSH1:
+                    il.CleanWord(current);
+                    il.Load(current);
+                    int value = (i + 1 >= code.Length) ? 0 : code[i + 1];
+                    il.LoadValue(value);
+                    il.Emit(OpCodes.Stfld, Word.Byte0Field);
+                    il.StackUp(current);
                     break;
                 case Instruction.POP:
                     il.Load(current);
@@ -131,7 +144,7 @@ public class IlVirtualMachine : IVirtualMachine
         for (int i = 0; i < code.Length; i++)
         {
             Operation op = _operations[(Instruction)code[i]];
-            if (op.FlowControl)
+            if (op.GasComputationPoint)
             {
                 costs[costStart] = costCurrent;
                 costStart = i;
@@ -155,6 +168,9 @@ public class IlVirtualMachine : IVirtualMachine
         {
             { Instruction.POP, new(Instruction.POP, GasCostOf.Base, 0, 1, 0)},
             { Instruction.PC, new(Instruction.PC, GasCostOf.Base, 0, 0, 1)},
+            { Instruction.PUSH1, new(Instruction.PUSH1, GasCostOf.VeryLow, 1, 0, 1)},
+            //{ Instruction.JUMPDEST, new(Instruction.JUMPDEST, GasCostOf.JumpDest, 0, 0, 0, true)},
+            //{ Instruction.JUMP, new(Instruction.JUMP, GasCostOf.Mid, 0, 1, 0, true)}
         };
 
     public readonly struct Operation
@@ -185,21 +201,21 @@ public class IlVirtualMachine : IVirtualMachine
         public byte StackBehaviorPush { get; }
 
         /// <summary>
-        /// Whether it's a flow control instruction.
+        /// Marks the point important from the gas computation point
         /// </summary>
-        public bool FlowControl { get; }
+        public bool GasComputationPoint { get; }
 
         /// <summary>
         /// Creates the new operation.
         /// </summary>
-        public Operation(Instruction instruction, long gasCost, byte additionalBytes, byte stackBehaviorPop, byte stackBehaviorPush, bool flowControl = false)
+        public Operation(Instruction instruction, long gasCost, byte additionalBytes, byte stackBehaviorPop, byte stackBehaviorPush, bool gasComputationPoint = false)
         {
             Instruction = instruction;
             GasCost = gasCost;
             AdditionalBytes = additionalBytes;
             StackBehaviorPop = stackBehaviorPop;
             StackBehaviorPush = stackBehaviorPush;
-            FlowControl = flowControl;
+            GasComputationPoint = gasComputationPoint;
         }
     }
 }
@@ -247,7 +263,7 @@ static class EmitExtensions
         il.Emit(OpCodes.Initobj, typeof(Word));
     }
 
-    public static void BumpUpStack(this ILGenerator il, LocalBuilder local)
+    public static void StackUp(this ILGenerator il, LocalBuilder local)
     {
         il.Load(local);
         il.LoadValue(Word.Size);
@@ -301,9 +317,26 @@ static class EmitExtensions
             case 3:
                 il.Emit(OpCodes.Ldc_I4_3);
                 break;
-            // TODO: add rest as well as the short form
+            case 4:
+                il.Emit(OpCodes.Ldc_I4_4);
+                break;
+            case 5:
+                il.Emit(OpCodes.Ldc_I4_5);
+                break;
+            case 6:
+                il.Emit(OpCodes.Ldc_I4_6);
+                break;
+            case 7:
+                il.Emit(OpCodes.Ldc_I4_7);
+                break;
+            case 8:
+                il.Emit(OpCodes.Ldc_I4_8);
+                break;
             default:
-                il.Emit(OpCodes.Ldc_I4, value);
+                if (value <= 255)
+                    il.Emit(OpCodes.Ldc_I4_S, (byte)value);
+                else
+                    il.Emit(OpCodes.Ldc_I4, value);
                 break;
         }
     }

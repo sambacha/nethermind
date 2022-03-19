@@ -25,10 +25,21 @@ public class IlVirtualMachineTests : VirtualMachineTestsBase
     protected override IVirtualMachine BuildVirtualMachine(IBlockhashProvider blockhashProvider, ILogManager logManager) => new IlVirtualMachine();
 
     [Test]
-    public void Test()
+    public void Test1()
     {
         byte[] code = Prepare.EvmCode
             .Op(Instruction.PC)
+            .Op(Instruction.POP)
+            .Done;
+
+        TestAllTracerWithOutput result = Execute(code);
+    }
+
+    [Test]
+    public void Test2()
+    {
+        byte[] code = Prepare.EvmCode
+            .PushData(1)
             .Op(Instruction.POP)
             .Done;
 
