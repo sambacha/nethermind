@@ -15,6 +15,7 @@
 //  along with the Nethermind. If not, see <http://www.gnu.org/licenses/>.
 // 
 
+using System;
 using Nethermind.Logging;
 using NUnit.Framework;
 
@@ -33,6 +34,8 @@ public class IlVirtualMachineTests : VirtualMachineTestsBase
             .Done;
 
         TestAllTracerWithOutput result = Execute(code);
+
+        Console.WriteLine(result.Error);
     }
 
     [Test]
@@ -44,5 +47,34 @@ public class IlVirtualMachineTests : VirtualMachineTestsBase
             .Done;
 
         TestAllTracerWithOutput result = Execute(code);
+
+        Console.WriteLine(result.Error);
+    }
+
+    [Test]
+    public void InvalidJump()
+    {
+        byte[] code = Prepare.EvmCode
+            .PushData(1)
+            .Op(Instruction.JUMP)
+            .Done;
+
+        TestAllTracerWithOutput result = Execute(code);
+
+        Console.WriteLine(result.Error);
+    }
+
+    [Test]
+    public void ValidJump()
+    {
+        byte[] code = Prepare.EvmCode
+            .PushData(2)
+            .Op(Instruction.JUMP)
+            .Op(Instruction.JUMPDEST)
+            .Done;
+
+        TestAllTracerWithOutput result = Execute(code);
+
+        Console.WriteLine(result.Error);
     }
 }

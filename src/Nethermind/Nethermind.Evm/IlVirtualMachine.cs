@@ -23,6 +23,7 @@ using System.Reflection;
 using System.Reflection.Emit;
 using System.Runtime.InteropServices;
 using Nethermind.Evm.Tracing;
+using Nethermind.Int256;
 using Nethermind.State;
 
 namespace Nethermind.Evm;
@@ -33,16 +34,63 @@ struct Word
     public const int Size = 32;
 
     [FieldOffset(0)] public unsafe fixed byte _buffer[Size];
+    
+    [FieldOffset(Size - sizeof(byte))]
+    public byte Byte0;
 
     [FieldOffset(Size - sizeof(int))]
     public int Int0;
 
-    [FieldOffset(Size - sizeof(byte))]
-    public byte Byte0;
+    [FieldOffset(Size - sizeof(int))]
+    public uint UInt0;
+
+    [FieldOffset(Size - 2 * sizeof(int))]
+    public uint UInt1;
+
+    [FieldOffset(Size - 1 * sizeof(ulong))]
+    public ulong Ulong0;
+
+    [FieldOffset(Size - 2* sizeof(ulong))]
+    public ulong Ulong1;
+    
+    [FieldOffset(Size - 3* sizeof(ulong))]
+    public ulong Ulong2;
+
+    [FieldOffset(Size - 4 * sizeof(ulong))]
+    public ulong Ulong3;
+
+    public static readonly FieldInfo Byte0Field = typeof(Word).GetField(nameof(Byte0));
 
     public static readonly FieldInfo Int0Field = typeof(Word).GetField(nameof(Int0));
 
-    public static readonly FieldInfo Byte0Field = typeof(Word).GetField(nameof(Byte0));
+    public static readonly FieldInfo UInt0Field = typeof(Word).GetField(nameof(UInt0));
+    public static readonly FieldInfo UInt1Field = typeof(Word).GetField(nameof(UInt1));
+    
+    public static readonly FieldInfo Ulong0Field = typeof(Word).GetField(nameof(Ulong0));
+    public static readonly FieldInfo Ulong1Field = typeof(Word).GetField(nameof(Ulong1));
+    public static readonly FieldInfo Ulong2Field = typeof(Word).GetField(nameof(Ulong2));
+    public static readonly FieldInfo Ulong3Field = typeof(Word).GetField(nameof(Ulong3));
+    
+    public UInt256 PopUInt256
+    {
+        get
+        {
+            ulong u3 = Ulong3;
+            ulong u2 = Ulong2;
+            ulong u1 = Ulong1;
+            ulong u0 = Ulong0;
+
+            if (BitConverter.IsLittleEndian)
+            {
+                u3 = BinaryPrimitives.ReverseEndianness(u3);
+                u2 = BinaryPrimitives.ReverseEndianness(u2);
+                u1 = BinaryPrimitives.ReverseEndianness(u1);
+                u0 = BinaryPrimitives.ReverseEndianness(u0);
+            }
+
+            return new UInt256(u0, u1, u2, u3);
+        }
+    }
 }
 
 public class IlVirtualMachine : IVirtualMachine
@@ -55,14 +103,16 @@ public class IlVirtualMachine : IVirtualMachine
 
         // TODO: stack invariants, gasCost application
 
-        DynamicMethod method = new("JIT_" + state.Env.CodeSource, typeof(void), Type.EmptyTypes, typeof(IlVirtualMachine).Assembly.Modules.First(), true)
+        DynamicMethod method = new("JIT_" + state.Env.CodeSource, typeof(EvmExceptionType), Type.EmptyTypes, typeof(IlVirtualMachine).Assembly.Modules.First(), true)
         {
             InitLocals = false
         };
 
         ILGenerator il = method.GetILGenerator();
 
-        // TODO: stack check
+        LocalBuilder jmpDestination = il.DeclareLocal(Word.Int0Field.FieldType);
+
+        // TODO: stack check for head
         LocalBuilder stack = il.DeclareLocal(typeof(Word*));
         LocalBuilder current = il.DeclareLocal(typeof(Word*));
 
@@ -86,6 +136,12 @@ public class IlVirtualMachine : IVirtualMachine
 
         int pc = 0;
 
+        Label ret = il.DefineLabel(); // the label just before return
+        Label invalidAddress = il.DefineLabel(); // invalid jump address
+        Label jumpTable = il.DefineLabel(); // jump table
+
+        Dictionary<int, Label> jumpDestinations = new();
+
         for (int i = 0; i < code.Length; i++)
         {
             Operation op = _operations[(Instruction)code[i]];
@@ -96,8 +152,8 @@ public class IlVirtualMachine : IVirtualMachine
                     il.CleanWord(current);
                     il.Load(current);
                     il.LoadValue(BinaryPrimitives.ReverseEndianness(pc)); // TODO: assumes little endian machine
-                    il.Emit(OpCodes.Stfld, Word.Int0Field);
-                    il.StackUp(current);
+                    il.Emit(OpCodes.Stfld, Word.UInt0Field);
+                    il.StackPush(current);
                     break;
                 case Instruction.PUSH1:
                     il.CleanWord(current);
@@ -105,14 +161,18 @@ public class IlVirtualMachine : IVirtualMachine
                     int value = (i + 1 >= code.Length) ? 0 : code[i + 1];
                     il.LoadValue(value);
                     il.Emit(OpCodes.Stfld, Word.Byte0Field);
-                    il.StackUp(current);
+                    il.StackPush(current);
                     break;
                 case Instruction.POP:
-                    il.Load(current);
-                    il.LoadValue(Word.Size);
-                    il.Emit(OpCodes.Conv_I);
-                    il.Emit(OpCodes.Sub);
-                    il.Store(current);
+                    il.StackPop(current);
+                    break;
+                case Instruction.JUMPDEST:
+                    Label dest = il.DefineLabel();
+                    jumpDestinations[pc] = dest;
+                    il.MarkLabel(dest);
+                    break;
+                case Instruction.JUMP:
+                    il.Emit(OpCodes.Br, jumpTable);
                     break;
                 default:
                     throw new NotImplementedException();
@@ -122,12 +182,78 @@ public class IlVirtualMachine : IVirtualMachine
             pc++;
         }
 
+        // jump to return
+        il.LoadValue((int)EvmExceptionType.None);
+        il.Emit(OpCodes.Br, ret);
+
+        // jump table
+        il.MarkLabel(jumpTable);
+
+        il.StackPop(current); // move the stack down
+
+        // if (jumpDest > ushort.MaxValue)
+        // ULong3 | Ulong2 | Ulong1 | Uint1 | Ushort1
+        il.Load(current, Word.Ulong3Field);
+        il.Load(current, Word.Ulong2Field);
+        il.Emit(OpCodes.Or);
+        il.Load(current, Word.Ulong1Field);
+        il.Emit(OpCodes.Or);
+        il.Load(current, Word.UInt1Field);
+        il.Emit(OpCodes.Or);
+
+        il.Emit(OpCodes.Brtrue, invalidAddress); // invalid address
+
+        // emit actual jump table with first switch statement covering fanout of values, then ifs in specific branches
+        const int jumpFanOutLog = 7; // 128
+        const int bitMask = (1 << jumpFanOutLog) - 1;
+
+        Label[] jumps = new Label[jumpFanOutLog];
+        for (int i = 0; i < jumpFanOutLog; i++)
+        {
+            jumps[i] = il.DefineLabel();
+        }
+
+        // save to helper
+        il.Load(current, Word.Int0Field);
+        il.Store(jmpDestination);
+
+        // & with mask
+        il.Load(jmpDestination);
+        il.LoadValue(bitMask); 
+        il.Emit(OpCodes.And);
+
+        il.Emit(OpCodes.Switch, jumps); // actual jump table to jump directly to the specific range of addresses
+
+        int[] destinations = jumpDestinations.Keys.ToArray();
+
+        for (int i = 0; i < jumpFanOutLog; i++)
+        {
+            il.MarkLabel(jumps[i]);
+
+            // for each destination matching the bit mask emit check for the equality
+            foreach (int dest in destinations.Where(dest => (dest & bitMask) == i))
+            {
+                il.Load(jmpDestination);
+                il.LoadValue(dest);
+                il.Emit(OpCodes.Beq, jumpDestinations[dest]);
+            }
+
+            // each bucket ends with a jump to invalid access to do not fall through to another one
+            il.Emit(OpCodes.Br, invalidAddress);
+        }
+
+        // invalid address return
+        il.MarkLabel(invalidAddress);
+        il.LoadValue((int)EvmExceptionType.InvalidJumpDestination);
+        il.Emit(OpCodes.Br, ret);
+
+        // return
+        il.MarkLabel(ret);
         il.Emit(OpCodes.Ret);
 
-        Action del = method.CreateDelegate<Action>();
-        del();
+        Func<EvmExceptionType> del = method.CreateDelegate<Func<EvmExceptionType>>();
 
-        return new TransactionSubstate(EvmExceptionType.None, false);
+        return new TransactionSubstate(del(), true);
     }
 
     public void DisableSimdInstructions()
@@ -169,8 +295,8 @@ public class IlVirtualMachine : IVirtualMachine
             { Instruction.POP, new(Instruction.POP, GasCostOf.Base, 0, 1, 0)},
             { Instruction.PC, new(Instruction.PC, GasCostOf.Base, 0, 0, 1)},
             { Instruction.PUSH1, new(Instruction.PUSH1, GasCostOf.VeryLow, 1, 0, 1)},
-            //{ Instruction.JUMPDEST, new(Instruction.JUMPDEST, GasCostOf.JumpDest, 0, 0, 0, true)},
-            //{ Instruction.JUMP, new(Instruction.JUMP, GasCostOf.Mid, 0, 1, 0, true)}
+            { Instruction.JUMPDEST, new(Instruction.JUMPDEST, GasCostOf.JumpDest, 0, 0, 0, true)},
+            { Instruction.JUMP, new(Instruction.JUMP, GasCostOf.Mid, 0, 1, 0, true)}
         };
 
     public readonly struct Operation
@@ -251,6 +377,22 @@ static class EmitExtensions
         }
     }
 
+    public static void Load(this ILGenerator il, LocalBuilder local, FieldInfo wordField)
+    {
+        if (local.LocalType != typeof(Word*))
+        {
+            throw new ArgumentException($"Only Word* can be used. This variable is of type {local.LocalType}");
+        }
+
+        if (wordField.DeclaringType != typeof(Word))
+        {
+            throw new ArgumentException($"Only Word fields can be used. This field is declared for {wordField.DeclaringType}");
+        }
+
+        il.Load(local);
+        il.Emit(OpCodes.Ldfld, wordField);
+    }
+
     public static void CleanWord(this ILGenerator il, LocalBuilder local)
     {
         if (local.LocalType != typeof(Word*))
@@ -263,12 +405,27 @@ static class EmitExtensions
         il.Emit(OpCodes.Initobj, typeof(Word));
     }
 
-    public static void StackUp(this ILGenerator il, LocalBuilder local)
+    /// <summary>
+    /// Advances the stack one word up.
+    /// </summary>
+    public static void StackPush(this ILGenerator il, LocalBuilder local)
     {
         il.Load(local);
         il.LoadValue(Word.Size);
         il.Emit(OpCodes.Conv_I);
         il.Emit(OpCodes.Add);
+        il.Store(local);
+    }
+
+    /// <summary>
+    /// Moves the stack one word down.
+    /// </summary>
+    public static void StackPop(this ILGenerator il, LocalBuilder local)
+    {
+        il.Load(local);
+        il.LoadValue(Word.Size);
+        il.Emit(OpCodes.Conv_I);
+        il.Emit(OpCodes.Sub);
         il.Store(local);
     }
 
