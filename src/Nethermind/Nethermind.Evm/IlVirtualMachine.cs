@@ -18,6 +18,7 @@
 using System;
 using System.Buffers.Binary;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using System.Reflection;
 using System.Reflection.Emit;
@@ -91,6 +92,10 @@ struct Word
             return new UInt256(u0, u1, u2, u3);
         }
     }
+
+    public override string ToString() => $"{nameof(Ulong0)}: {Ulong0}, {nameof(Ulong1)}: {Ulong1}, {nameof(Ulong2)}: {Ulong2}, {nameof(Ulong3)}: {Ulong3}";
+
+    public void ConsoleWrite() => Console.WriteLine(ToString());
 }
 
 public class IlVirtualMachine : IVirtualMachine
@@ -191,7 +196,7 @@ public class IlVirtualMachine : IVirtualMachine
 
         il.StackPop(current); // move the stack down
 
-        // if (jumpDest > ushort.MaxValue)
+        // if (jumpDest > uint.MaxValue)
         // ULong3 | Ulong2 | Ulong1 | Uint1 | Ushort1
         il.Load(current, Word.Ulong3Field);
         il.Load(current, Word.Ulong2Field);
@@ -199,10 +204,11 @@ public class IlVirtualMachine : IVirtualMachine
         il.Load(current, Word.Ulong1Field);
         il.Emit(OpCodes.Or);
         il.Load(current, Word.UInt1Field);
+        il.Emit(OpCodes.Conv_U8);
         il.Emit(OpCodes.Or);
 
-        il.Emit(OpCodes.Brtrue, invalidAddress); // invalid address
-
+        il.Emit(OpCodes.Brtrue, invalidAddress);
+        
         // emit actual jump table with first switch statement covering fanout of values, then ifs in specific branches
         const int jumpFanOutLog = 7; // 128
         const int bitMask = (1 << jumpFanOutLog) - 1;
@@ -215,6 +221,9 @@ public class IlVirtualMachine : IVirtualMachine
 
         // save to helper
         il.Load(current, Word.Int0Field);
+
+        // endianess!
+        il.EmitCall(OpCodes.Call, typeof(BinaryPrimitives).GetMethod(nameof(BinaryPrimitives.ReverseEndianness), BindingFlags.Public | BindingFlags.Static, new Type[]{typeof(uint)}), null);
         il.Store(jmpDestination);
 
         // & with mask
