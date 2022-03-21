@@ -52,7 +52,7 @@ public class IlVirtualMachineTests : VirtualMachineTestsBase
     }
 
     [Test]
-    public void InvalidJump()
+    public void Jump_Invalid()
     {
         byte[] code = Prepare.EvmCode
             .PushData(1)
@@ -65,11 +65,54 @@ public class IlVirtualMachineTests : VirtualMachineTestsBase
     }
 
     [Test]
-    public void ValidJump()
+    public void Jump_Valid()
     {
         byte[] code = Prepare.EvmCode
             .PushData(2)
             .Op(Instruction.JUMP)
+            .Op(Instruction.JUMPDEST)
+            .Done;
+
+        TestAllTracerWithOutput result = Execute(code);
+
+        Console.WriteLine(result.Error);
+    }
+
+    [Test]
+    public void Jumpi_InvalidCondition()
+    {
+        byte[] code = Prepare.EvmCode
+            .PushData(0) // invalid condition
+            .PushData(1) // address
+            .Op(Instruction.JUMPI)
+            .Done;
+
+        TestAllTracerWithOutput result = Execute(code);
+
+        Console.WriteLine(result.Error);
+    }
+
+    [Test]
+    public void Jumpi_ValidCondition_InvalidAddress()
+    {
+        byte[] code = Prepare.EvmCode
+            .PushData(1) // valid condition
+            .PushData(1) // address
+            .Op(Instruction.JUMPI)
+            .Done;
+
+        TestAllTracerWithOutput result = Execute(code);
+
+        Console.WriteLine(result.Error);
+    }
+
+    [Test]
+    public void Jumpi_ValidCondition_ValidAddress()
+    {
+        byte[] code = Prepare.EvmCode
+            .PushData(1) // valid condition
+            .PushData(3) // address
+            .Op(Instruction.JUMPI)
             .Op(Instruction.JUMPDEST)
             .Done;
 

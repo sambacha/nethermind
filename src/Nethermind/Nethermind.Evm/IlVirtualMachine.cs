@@ -72,6 +72,10 @@ struct Word
     public static readonly FieldInfo Ulong2Field = typeof(Word).GetField(nameof(Ulong2));
     public static readonly FieldInfo Ulong3Field = typeof(Word).GetField(nameof(Ulong3));
     
+    public static readonly MethodInfo GetIsZero = typeof(Word).GetProperty(nameof(IsZero))!.GetMethod;
+
+    public bool IsZero => (Ulong0 | Ulong1 | Ulong2 | Ulong3) == 0;
+
     public UInt256 PopUInt256
     {
         get
@@ -116,6 +120,7 @@ public class IlVirtualMachine : IVirtualMachine
         ILGenerator il = method.GetILGenerator();
 
         LocalBuilder jmpDestination = il.DeclareLocal(Word.Int0Field.FieldType);
+        LocalBuilder consumeJumpCondition = il.DeclareLocal(typeof(int));
 
         // TODO: stack check for head
         LocalBuilder stack = il.DeclareLocal(typeof(Word*));
@@ -179,6 +184,23 @@ public class IlVirtualMachine : IVirtualMachine
                 case Instruction.JUMP:
                     il.Emit(OpCodes.Br, jumpTable);
                     break;
+                case Instruction.JUMPI:
+                    Label noJump = il.DefineLabel();
+
+                    il.StackLoadPrevious(current, 2); // load condition that is on the second
+                    il.EmitCall(OpCodes.Call, Word.GetIsZero, null);
+                    
+                    il.Emit(OpCodes.Brtrue_S, noJump); // if zero, just jump to removal two values and move on
+
+                    // condition is met, mark condition as to be removed
+                    il.LoadValue(1);
+                    il.Store(consumeJumpCondition);
+                    il.Emit(OpCodes.Br, jumpTable);
+
+                    // condition is not met, just consume
+                    il.MarkLabel(noJump);
+                    il.StackPop(current, 2);
+                    break;
                 default:
                     throw new NotImplementedException();
             }
@@ -194,7 +216,7 @@ public class IlVirtualMachine : IVirtualMachine
         // jump table
         il.MarkLabel(jumpTable);
 
-        il.StackPop(current); // move the stack down
+        il.StackPop(current); // move the stack down to address
 
         // if (jumpDest > uint.MaxValue)
         // ULong3 | Ulong2 | Ulong1 | Uint1 | Ushort1
@@ -223,8 +245,13 @@ public class IlVirtualMachine : IVirtualMachine
         il.Load(current, Word.Int0Field);
 
         // endianess!
-        il.EmitCall(OpCodes.Call, typeof(BinaryPrimitives).GetMethod(nameof(BinaryPrimitives.ReverseEndianness), BindingFlags.Public | BindingFlags.Static, new Type[]{typeof(uint)}), null);
+        il.EmitCall(OpCodes.Call, typeof(BinaryPrimitives).GetMethod(nameof(BinaryPrimitives.ReverseEndianness), BindingFlags.Public | BindingFlags.Static, new []{typeof(uint)}), null);
         il.Store(jmpDestination);
+
+        // consume if this was a conditional jump and zero it. Notice that this is a branch-free approach that uses 0 or 1 + multiplication to advance the word pointer or not
+        il.StackPop(current, consumeJumpCondition);
+        il.LoadValue(0);
+        il.Store(consumeJumpCondition);
 
         // & with mask
         il.Load(jmpDestination);
@@ -305,7 +332,8 @@ public class IlVirtualMachine : IVirtualMachine
             { Instruction.PC, new(Instruction.PC, GasCostOf.Base, 0, 0, 1)},
             { Instruction.PUSH1, new(Instruction.PUSH1, GasCostOf.VeryLow, 1, 0, 1)},
             { Instruction.JUMPDEST, new(Instruction.JUMPDEST, GasCostOf.JumpDest, 0, 0, 0, true)},
-            { Instruction.JUMP, new(Instruction.JUMP, GasCostOf.Mid, 0, 1, 0, true)}
+            { Instruction.JUMP, new(Instruction.JUMP, GasCostOf.Mid, 0, 1, 0, true)},
+            { Instruction.JUMPI, new(Instruction.JUMPI, GasCostOf.High, 0, 2, 0, true)}
         };
 
     public readonly struct Operation
@@ -427,15 +455,40 @@ static class EmitExtensions
     }
 
     /// <summary>
-    /// Moves the stack one word down.
+    /// Moves the stack <paramref name="count"/> words down.
     /// </summary>
-    public static void StackPop(this ILGenerator il, LocalBuilder local)
+    public static void StackPop(this ILGenerator il, LocalBuilder local, int count = 1)
     {
         il.Load(local);
-        il.LoadValue(Word.Size);
+        il.LoadValue(Word.Size * count);
         il.Emit(OpCodes.Conv_I);
         il.Emit(OpCodes.Sub);
         il.Store(local);
+    }
+
+    /// <summary>
+    /// Moves the stack <paramref name="count"/> words down.
+    /// </summary>
+    public static void StackPop(this ILGenerator il, LocalBuilder local, LocalBuilder count)
+    {
+        il.Load(local);
+        il.LoadValue(Word.Size);
+        il.Load(count);
+        il.Emit(OpCodes.Mul);
+        il.Emit(OpCodes.Conv_I);
+        il.Emit(OpCodes.Sub);
+        il.Store(local);
+    }
+
+    /// <summary>
+    /// Loads the previous EVM stack value on top of .NET stack.
+    /// </summary>
+    public static void StackLoadPrevious(this ILGenerator il, LocalBuilder local, int count = 1)
+    {
+        il.Load(local);
+        il.LoadValue(Word.Size * count);
+        il.Emit(OpCodes.Conv_I);
+        il.Emit(OpCodes.Sub);
     }
 
     public static void Store(this ILGenerator il, LocalBuilder local)
