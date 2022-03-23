@@ -120,4 +120,18 @@ public class IlVirtualMachineTests : VirtualMachineTestsBase
 
         Console.WriteLine(result.Error);
     }
+
+    [Test]
+    public void Sub()
+    {
+        byte[] code = Prepare.EvmCode
+            .PushData(1)
+            .PushData(2)
+            .Op(Instruction.SUB)
+            .Done;
+
+        TestAllTracerWithOutput result = Execute(code);
+
+        Console.WriteLine(result.Error);
+    }
 }

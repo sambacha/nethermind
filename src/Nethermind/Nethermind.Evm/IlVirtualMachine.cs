@@ -18,11 +18,11 @@
 using System;
 using System.Buffers.Binary;
 using System.Collections.Generic;
-using System.Diagnostics;
 using System.Linq;
 using System.Reflection;
 using System.Reflection.Emit;
 using System.Runtime.InteropServices;
+using Nethermind.Core.Extensions;
 using Nethermind.Evm.Tracing;
 using Nethermind.Int256;
 using Nethermind.State;
@@ -35,7 +35,7 @@ struct Word
     public const int Size = 32;
 
     [FieldOffset(0)] public unsafe fixed byte _buffer[Size];
-    
+
     [FieldOffset(Size - sizeof(byte))]
     public byte Byte0;
 
@@ -51,10 +51,10 @@ struct Word
     [FieldOffset(Size - 1 * sizeof(ulong))]
     public ulong Ulong0;
 
-    [FieldOffset(Size - 2* sizeof(ulong))]
+    [FieldOffset(Size - 2 * sizeof(ulong))]
     public ulong Ulong1;
-    
-    [FieldOffset(Size - 3* sizeof(ulong))]
+
+    [FieldOffset(Size - 3 * sizeof(ulong))]
     public ulong Ulong2;
 
     [FieldOffset(Size - 4 * sizeof(ulong))]
@@ -66,17 +66,20 @@ struct Word
 
     public static readonly FieldInfo UInt0Field = typeof(Word).GetField(nameof(UInt0));
     public static readonly FieldInfo UInt1Field = typeof(Word).GetField(nameof(UInt1));
-    
+
     public static readonly FieldInfo Ulong0Field = typeof(Word).GetField(nameof(Ulong0));
     public static readonly FieldInfo Ulong1Field = typeof(Word).GetField(nameof(Ulong1));
     public static readonly FieldInfo Ulong2Field = typeof(Word).GetField(nameof(Ulong2));
     public static readonly FieldInfo Ulong3Field = typeof(Word).GetField(nameof(Ulong3));
-    
+
     public static readonly MethodInfo GetIsZero = typeof(Word).GetProperty(nameof(IsZero))!.GetMethod;
+
+    public static readonly MethodInfo GetUInt256 = typeof(Word).GetProperty(nameof(UInt256))!.GetMethod;
+    public static readonly MethodInfo SetUInt256 = typeof(Word).GetProperty(nameof(UInt256))!.SetMethod;
 
     public bool IsZero => (Ulong0 | Ulong1 | Ulong2 | Ulong3) == 0;
 
-    public UInt256 PopUInt256
+    public UInt256 UInt256
     {
         get
         {
@@ -95,11 +98,27 @@ struct Word
 
             return new UInt256(u0, u1, u2, u3);
         }
+        set
+        {
+            ulong u3 = value.u3;
+            ulong u2 = value.u2;
+            ulong u1 = value.u1;
+            ulong u0 = value.u0;
+
+            if (BitConverter.IsLittleEndian)
+            {
+                u3 = BinaryPrimitives.ReverseEndianness(u3);
+                u2 = BinaryPrimitives.ReverseEndianness(u2);
+                u1 = BinaryPrimitives.ReverseEndianness(u1);
+                u0 = BinaryPrimitives.ReverseEndianness(u0);
+            }
+
+            Ulong3 = u3;
+            Ulong2 = u2;
+            Ulong1 = u1;
+            Ulong0 = u0;
+        }
     }
-
-    public override string ToString() => $"{nameof(Ulong0)}: {Ulong0}, {nameof(Ulong1)}: {Ulong1}, {nameof(Ulong2)}: {Ulong2}, {nameof(Ulong3)}: {Ulong3}";
-
-    public void ConsoleWrite() => Console.WriteLine(ToString());
 }
 
 public class IlVirtualMachine : IVirtualMachine
@@ -121,6 +140,9 @@ public class IlVirtualMachine : IVirtualMachine
 
         LocalBuilder jmpDestination = il.DeclareLocal(Word.Int0Field.FieldType);
         LocalBuilder consumeJumpCondition = il.DeclareLocal(typeof(int));
+        LocalBuilder uint256a = il.DeclareLocal(typeof(UInt256));
+        LocalBuilder uint256b = il.DeclareLocal(typeof(UInt256));
+        LocalBuilder uint256c = il.DeclareLocal(typeof(UInt256));
 
         // TODO: stack check for head
         LocalBuilder stack = il.DeclareLocal(typeof(Word*));
@@ -165,14 +187,56 @@ public class IlVirtualMachine : IVirtualMachine
                     il.Emit(OpCodes.Stfld, Word.UInt0Field);
                     il.StackPush(current);
                     break;
+
+                // pushes work as follows
+                // 1. load the next top pointer of the stack
+                // 2. zero it
+                // 3. load the value
+                // 4. set the field
+                // 5. advance pointer
                 case Instruction.PUSH1:
-                    il.Load(current);                           // load the next top pointer of the stack
-                    il.Emit(OpCodes.Initobj, typeof(Word));     // zero it
-                    il.Load(current);                           // load the next top pointer of the stack
-                    byte value = (byte)((i + 1 >= code.Length) ? 0 : code[i + 1]);
-                    il.Emit(OpCodes.Ldc_I4_S, value);           // load the byte value
-                    il.Emit(OpCodes.Stfld, Word.Byte0Field);    // set the field
-                    il.StackPush(current);                      // advance stack pointer
+                    il.Load(current);
+                    il.Emit(OpCodes.Initobj, typeof(Word));
+                    il.Load(current);
+                    byte push1 = (byte)((i + 1 >= code.Length) ? 0 : code[i + 1]);
+                    il.Emit(OpCodes.Ldc_I4_S, push1);
+                    il.Emit(OpCodes.Stfld, Word.Byte0Field);
+                    il.StackPush(current);
+                    break;
+                case Instruction.PUSH2:
+                case Instruction.PUSH3:
+                case Instruction.PUSH4:
+                    il.Load(current);
+                    il.Emit(OpCodes.Initobj, typeof(Word));
+                    il.Load(current);
+                    int push2 = BinaryPrimitives.ReadInt32LittleEndian(code.Slice(i + 1).ToArray().Concat(new byte[4]).ToArray());
+                    il.Emit(OpCodes.Ldc_I4, BinaryPrimitives.ReverseEndianness(push2));
+                    il.Emit(OpCodes.Stfld, Word.Int0Field);
+                    il.StackPush(current);
+                    break;
+                case Instruction.SUB:
+                    // a
+                    il.StackLoadPrevious(current, 1);
+                    il.EmitCall(OpCodes.Call, Word.GetUInt256, null);
+                    il.Store(uint256a);
+
+                    // b
+                    il.StackLoadPrevious(current, 2);
+                    il.EmitCall(OpCodes.Call, Word.GetUInt256, null); // stack: uint256, uint256
+                    il.Store(uint256b);
+
+                    // a - b = c
+                    il.LoadAddress(uint256a);
+                    il.LoadAddress(uint256b);
+                    il.LoadAddress(uint256c);
+
+                    MethodInfo subtract = typeof(UInt256).GetMethod(nameof(UInt256.Subtract), BindingFlags.Public | BindingFlags.Static)!;
+                    il.EmitCall(OpCodes.Call, subtract, null); // stack: _
+
+                    il.StackPop(current);
+                    il.Load(current);
+                    il.Load(uint256c); // stack: word*, uint256
+                    il.EmitCall(OpCodes.Call, Word.SetUInt256, null);
                     break;
                 case Instruction.POP:
                     il.StackPop(current);
@@ -190,7 +254,7 @@ public class IlVirtualMachine : IVirtualMachine
 
                     il.StackLoadPrevious(current, 2); // load condition that is on the second
                     il.EmitCall(OpCodes.Call, Word.GetIsZero, null);
-                    
+
                     il.Emit(OpCodes.Brtrue_S, noJump); // if zero, just jump to removal two values and move on
 
                     // condition is met, mark condition as to be removed
@@ -231,7 +295,7 @@ public class IlVirtualMachine : IVirtualMachine
         il.Emit(OpCodes.Or);
 
         il.Emit(OpCodes.Brtrue, invalidAddress);
-        
+
         // emit actual jump table with first switch statement covering fanout of values, then ifs in specific branches
         const int jumpFanOutLog = 7; // 128
         const int bitMask = (1 << jumpFanOutLog) - 1;
@@ -246,7 +310,7 @@ public class IlVirtualMachine : IVirtualMachine
         il.Load(current, Word.Int0Field);
 
         // endianess!
-        il.EmitCall(OpCodes.Call, typeof(BinaryPrimitives).GetMethod(nameof(BinaryPrimitives.ReverseEndianness), BindingFlags.Public | BindingFlags.Static, new []{typeof(uint)}), null);
+        il.EmitCall(OpCodes.Call, typeof(BinaryPrimitives).GetMethod(nameof(BinaryPrimitives.ReverseEndianness), BindingFlags.Public | BindingFlags.Static, new[] { typeof(uint) }), null);
         il.Store(jmpDestination);
 
         // consume if this was a conditional jump and zero it. Notice that this is a branch-free approach that uses 0 or 1 + multiplication to advance the word pointer or not
@@ -256,7 +320,7 @@ public class IlVirtualMachine : IVirtualMachine
 
         // & with mask
         il.Load(jmpDestination);
-        il.LoadValue(bitMask); 
+        il.LoadValue(bitMask);
         il.Emit(OpCodes.And);
 
         il.Emit(OpCodes.Switch, jumps); // actual jump table to jump directly to the specific range of addresses
@@ -327,15 +391,19 @@ public class IlVirtualMachine : IVirtualMachine
     }
 
     private static readonly IReadOnlyDictionary<Instruction, Operation> _operations =
-        new Dictionary<Instruction, Operation>
+        new Operation[]
         {
-            { Instruction.POP, new(Instruction.POP, GasCostOf.Base, 0, 1, 0)},
-            { Instruction.PC, new(Instruction.PC, GasCostOf.Base, 0, 0, 1)},
-            { Instruction.PUSH1, new(Instruction.PUSH1, GasCostOf.VeryLow, 1, 0, 1)},
-            { Instruction.JUMPDEST, new(Instruction.JUMPDEST, GasCostOf.JumpDest, 0, 0, 0, true)},
-            { Instruction.JUMP, new(Instruction.JUMP, GasCostOf.Mid, 0, 1, 0, true)},
-            { Instruction.JUMPI, new(Instruction.JUMPI, GasCostOf.High, 0, 2, 0, true)}
-        };
+            new(Instruction.POP, GasCostOf.Base, 0, 1, 0),
+            new(Instruction.PC, GasCostOf.Base, 0, 0, 1),
+            new(Instruction.PUSH1, GasCostOf.VeryLow, 1, 0, 1),
+            new(Instruction.PUSH2, GasCostOf.VeryLow, 2, 0, 1),
+            new(Instruction.PUSH3, GasCostOf.VeryLow, 3, 0, 1),
+            new(Instruction.PUSH4, GasCostOf.VeryLow, 4, 0, 1),
+            new(Instruction.JUMPDEST, GasCostOf.JumpDest, 0, 0, 0, true),
+            new(Instruction.JUMP, GasCostOf.Mid, 0, 1, 0, true),
+            new(Instruction.JUMPI, GasCostOf.High, 0, 2, 0, true),
+            new(Instruction.SUB, GasCostOf.VeryLow, 0, 2, 1, false)
+        }.ToDictionary(op => op.Instruction);
 
     public readonly struct Operation
     {
@@ -412,6 +480,18 @@ static class EmitExtensions
                     il.Emit(OpCodes.Ldloc, local.LocalIndex);
                 }
                 break;
+        }
+    }
+
+    public static void LoadAddress(this ILGenerator il, LocalBuilder local)
+    {
+        if (local.LocalIndex <= 255)
+        {
+            il.Emit(OpCodes.Ldloca_S, (byte)local.LocalIndex);
+        }
+        else
+        {
+            il.Emit(OpCodes.Ldloca, local.LocalIndex);
         }
     }
 
