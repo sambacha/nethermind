@@ -100,23 +100,20 @@ struct Word
         }
         set
         {
-            ulong u3 = value.u3;
-            ulong u2 = value.u2;
-            ulong u1 = value.u1;
-            ulong u0 = value.u0;
-
             if (BitConverter.IsLittleEndian)
             {
-                u3 = BinaryPrimitives.ReverseEndianness(u3);
-                u2 = BinaryPrimitives.ReverseEndianness(u2);
-                u1 = BinaryPrimitives.ReverseEndianness(u1);
-                u0 = BinaryPrimitives.ReverseEndianness(u0);
+                Ulong3 = BinaryPrimitives.ReverseEndianness(value.u3);
+                Ulong2 = BinaryPrimitives.ReverseEndianness(value.u2);
+                Ulong1 = BinaryPrimitives.ReverseEndianness(value.u1);
+                Ulong0 = BinaryPrimitives.ReverseEndianness(value.u0);
             }
-
-            Ulong3 = u3;
-            Ulong2 = u2;
-            Ulong1 = u1;
-            Ulong0 = u0;
+            else
+            {
+                Ulong3 = value.u3;
+                Ulong2 = value.u2;
+                Ulong1 = value.u1;
+                Ulong0 = value.u0;
+            }
         }
     }
 }
@@ -140,9 +137,10 @@ public class IlVirtualMachine : IVirtualMachine
 
         LocalBuilder jmpDestination = il.DeclareLocal(Word.Int0Field.FieldType);
         LocalBuilder consumeJumpCondition = il.DeclareLocal(typeof(int));
-        LocalBuilder uint256a = il.DeclareLocal(typeof(UInt256));
-        LocalBuilder uint256b = il.DeclareLocal(typeof(UInt256));
-        LocalBuilder uint256c = il.DeclareLocal(typeof(UInt256));
+        LocalBuilder word = il.DeclareLocal(typeof(Word));
+        LocalBuilder uint256A = il.DeclareLocal(typeof(UInt256));
+        LocalBuilder uint256B = il.DeclareLocal(typeof(UInt256));
+        LocalBuilder uint256C = il.DeclareLocal(typeof(UInt256));
 
         // TODO: stack check for head
         LocalBuilder stack = il.DeclareLocal(typeof(Word*));
@@ -166,17 +164,15 @@ public class IlVirtualMachine : IVirtualMachine
         il.Load(stack);
         il.Store(current); // copy to the current
 
-        int pc = 0;
-
         Label ret = il.DefineLabel(); // the label just before return
         Label invalidAddress = il.DefineLabel(); // invalid jump address
         Label jumpTable = il.DefineLabel(); // jump table
 
         Dictionary<int, Label> jumpDestinations = new();
 
-        for (int i = 0; i < code.Length; i++)
+        for (int pc = 0; pc < code.Length; pc++)
         {
-            Operation op = _operations[(Instruction)code[i]];
+            Operation op = _operations[(Instruction)code[pc]];
 
             switch (op.Instruction)
             {
@@ -198,10 +194,11 @@ public class IlVirtualMachine : IVirtualMachine
                     il.Load(current);
                     il.Emit(OpCodes.Initobj, typeof(Word));
                     il.Load(current);
-                    byte push1 = (byte)((i + 1 >= code.Length) ? 0 : code[i + 1]);
+                    byte push1 = (byte)((pc + 1 >= code.Length) ? 0 : code[pc + 1]);
                     il.Emit(OpCodes.Ldc_I4_S, push1);
                     il.Emit(OpCodes.Stfld, Word.Byte0Field);
                     il.StackPush(current);
+                    pc += 1;
                     break;
                 case Instruction.PUSH2:
                 case Instruction.PUSH3:
@@ -209,10 +206,11 @@ public class IlVirtualMachine : IVirtualMachine
                     il.Load(current);
                     il.Emit(OpCodes.Initobj, typeof(Word));
                     il.Load(current);
-                    int push2 = BinaryPrimitives.ReadInt32LittleEndian(code.Slice(i + 1).ToArray().Concat(new byte[4]).ToArray());
+                    int push2 = BinaryPrimitives.ReadInt32LittleEndian(code.Slice(pc + 1).ToArray().Concat(new byte[4]).ToArray());
                     il.Emit(OpCodes.Ldc_I4, BinaryPrimitives.ReverseEndianness(push2));
                     il.Emit(OpCodes.Stfld, Word.Int0Field);
                     il.StackPush(current);
+                    pc += 1 + op.Instruction - Instruction.PUSH1;
                     break;
                 case Instruction.DUP1:
                     il.Load(current);
@@ -223,7 +221,7 @@ public class IlVirtualMachine : IVirtualMachine
                     break;
                 case Instruction.SWAP1:
                     // copy to a helper variable the top item
-                    il.LoadAddress(uint256c); // reuse uint as a swap placeholder
+                    il.LoadAddress(word); // reuse uint as a swap placeholder
                     il.StackLoadPrevious(current, 1);
                     il.Emit(OpCodes.Ldobj, typeof(Word));
                     il.Emit(OpCodes.Stobj, typeof(Word));
@@ -238,7 +236,7 @@ public class IlVirtualMachine : IVirtualMachine
 
                     // write to the more nested one from local variable
                     il.StackLoadPrevious(current, swapWith);
-                    il.LoadAddress(uint256c);
+                    il.LoadAddress(word);
                     il.Emit(OpCodes.Ldobj, typeof(Word));
                     il.Emit(OpCodes.Stobj, typeof(Word));
                     break;
@@ -274,32 +272,30 @@ public class IlVirtualMachine : IVirtualMachine
                     // a
                     il.StackLoadPrevious(current, 1);
                     il.EmitCall(OpCodes.Call, Word.GetUInt256, null);
-                    il.Store(uint256a);
+                    il.Store(uint256A);
 
                     // b
                     il.StackLoadPrevious(current, 2);
                     il.EmitCall(OpCodes.Call, Word.GetUInt256, null); // stack: uint256, uint256
-                    il.Store(uint256b);
+                    il.Store(uint256B);
 
                     // a - b = c
-                    il.LoadAddress(uint256a);
-                    il.LoadAddress(uint256b);
-                    il.LoadAddress(uint256c);
+                    il.LoadAddress(uint256A);
+                    il.LoadAddress(uint256B);
+                    il.LoadAddress(uint256C);
 
                     MethodInfo subtract = typeof(UInt256).GetMethod(nameof(UInt256.Subtract), BindingFlags.Public | BindingFlags.Static)!;
                     il.EmitCall(OpCodes.Call, subtract, null); // stack: _
 
-                    il.StackPop(current);
+                    il.StackPop(current, 2);
                     il.Load(current);
-                    il.Load(uint256c); // stack: word*, uint256
+                    il.Load(uint256C); // stack: word*, uint256
                     il.EmitCall(OpCodes.Call, Word.SetUInt256, null);
+                    il.StackPush(current);
                     break;
                 default:
                     throw new NotImplementedException();
             }
-
-            i += op.AdditionalBytes;
-            pc++;
         }
 
         // jump to return
@@ -434,7 +430,7 @@ public class IlVirtualMachine : IVirtualMachine
             new(Instruction.DUP1, GasCostOf.VeryLow, 0, 1, 2),
             new(Instruction.SWAP1, GasCostOf.VeryLow, 0, 2, 2)
         }.ToDictionary(op => op.Instruction);
-    
+
     public readonly struct Operation
     {
         /// <summary>

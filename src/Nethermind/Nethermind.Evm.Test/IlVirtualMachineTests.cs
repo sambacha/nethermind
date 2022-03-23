@@ -68,7 +68,7 @@ public class IlVirtualMachineTests : VirtualMachineTestsBase
     public void Jump_Valid()
     {
         byte[] code = Prepare.EvmCode
-            .PushData(2)
+            .PushData(3)
             .Op(Instruction.JUMP)
             .Op(Instruction.JUMPDEST)
             .Done;
@@ -111,7 +111,7 @@ public class IlVirtualMachineTests : VirtualMachineTestsBase
     {
         byte[] code = Prepare.EvmCode
             .PushData(1) // valid condition
-            .PushData(3) // address
+            .PushData(5) // address
             .Op(Instruction.JUMPI)
             .Op(Instruction.JUMPDEST)
             .Done;
@@ -127,7 +127,11 @@ public class IlVirtualMachineTests : VirtualMachineTestsBase
         byte[] code = Prepare.EvmCode
             .PushData(1)
             .PushData(2)
-            .Op(Instruction.SUB)
+            .PushData(1)
+            .PushData(4)
+            .Op(Instruction.SUB)    // 4 - 1 = 3
+            .Op(Instruction.SUB)    // 3 - 2 = 1
+            .Op(Instruction.SUB)    // 1 - 1 = 0
             .Done;
 
         TestAllTracerWithOutput result = Execute(code);
@@ -141,7 +145,7 @@ public class IlVirtualMachineTests : VirtualMachineTestsBase
         byte[] code = Prepare.EvmCode
             .PushData(1)
             .Op(Instruction.DUP1)
-            .Op(Instruction.POP)
+            .Op(Instruction.SUB)
             .Op(Instruction.POP)
             .Done;
 
@@ -149,7 +153,7 @@ public class IlVirtualMachineTests : VirtualMachineTestsBase
 
         Console.WriteLine(result.Error);
     }
-    
+
     [Test]
     public void Swap()
     {
@@ -165,21 +169,24 @@ public class IlVirtualMachineTests : VirtualMachineTestsBase
         Console.WriteLine(result.Error);
     }
 
-    //[Test]
-    //public void Long_Loop()
-    //{
-    //    byte[] code = Prepare.EvmCode
-    //        .PushData(1000_000)
-    //        .Op(Instruction.JUMPDEST)
-    //        .
+    [Test]
+    public void Long_Loop()
+    {
+        byte[] code = Prepare.EvmCode
+            .PushData(5)
 
-    //        .Op(Instruction.DUP1)
-    //        .Op(Instruction.POP)
-    //        .Op(Instruction.POP)
-    //        .Done;
+            .Op(Instruction.JUMPDEST)   // counter
+            .PushData(1)                // counter, 1
+            .Op(Instruction.SWAP1)      // 1, counter
+            .Op(Instruction.SUB)        // counter-1
+            .Op(Instruction.DUP1)       // counter-1, counter-1
+            .PushData(2)                // counter-1, counter-1, 2
+            .Op(Instruction.JUMPI)      // counter-1
+            .Op(Instruction.POP)
+            .Done;
 
-    //    TestAllTracerWithOutput result = Execute(code);
+        TestAllTracerWithOutput result = Execute(code);
 
-    //    Console.WriteLine(result.Error);
-    //}
+        Console.WriteLine(result.Error);
+    }
 }
