@@ -214,29 +214,12 @@ public class IlVirtualMachine : IVirtualMachine
                     il.Emit(OpCodes.Stfld, Word.Int0Field);
                     il.StackPush(current);
                     break;
-                case Instruction.SUB:
-                    // a
-                    il.StackLoadPrevious(current, 1);
-                    il.EmitCall(OpCodes.Call, Word.GetUInt256, null);
-                    il.Store(uint256a);
-
-                    // b
-                    il.StackLoadPrevious(current, 2);
-                    il.EmitCall(OpCodes.Call, Word.GetUInt256, null); // stack: uint256, uint256
-                    il.Store(uint256b);
-
-                    // a - b = c
-                    il.LoadAddress(uint256a);
-                    il.LoadAddress(uint256b);
-                    il.LoadAddress(uint256c);
-
-                    MethodInfo subtract = typeof(UInt256).GetMethod(nameof(UInt256.Subtract), BindingFlags.Public | BindingFlags.Static)!;
-                    il.EmitCall(OpCodes.Call, subtract, null); // stack: _
-
-                    il.StackPop(current);
+                case Instruction.DUP1:
                     il.Load(current);
-                    il.Load(uint256c); // stack: word*, uint256
-                    il.EmitCall(OpCodes.Call, Word.SetUInt256, null);
+                    il.StackLoadPrevious(current, 1 + op.Instruction - Instruction.DUP1);
+                    il.Emit(OpCodes.Ldobj, typeof(Word));
+                    il.Emit(OpCodes.Stobj, typeof(Word));
+                    il.StackPush(current);
                     break;
                 case Instruction.POP:
                     il.StackPop(current);
@@ -265,6 +248,30 @@ public class IlVirtualMachine : IVirtualMachine
                     // condition is not met, just consume
                     il.MarkLabel(noJump);
                     il.StackPop(current, 2);
+                    break;
+                case Instruction.SUB:
+                    // a
+                    il.StackLoadPrevious(current, 1);
+                    il.EmitCall(OpCodes.Call, Word.GetUInt256, null);
+                    il.Store(uint256a);
+
+                    // b
+                    il.StackLoadPrevious(current, 2);
+                    il.EmitCall(OpCodes.Call, Word.GetUInt256, null); // stack: uint256, uint256
+                    il.Store(uint256b);
+
+                    // a - b = c
+                    il.LoadAddress(uint256a);
+                    il.LoadAddress(uint256b);
+                    il.LoadAddress(uint256c);
+
+                    MethodInfo subtract = typeof(UInt256).GetMethod(nameof(UInt256.Subtract), BindingFlags.Public | BindingFlags.Static)!;
+                    il.EmitCall(OpCodes.Call, subtract, null); // stack: _
+
+                    il.StackPop(current);
+                    il.Load(current);
+                    il.Load(uint256c); // stack: word*, uint256
+                    il.EmitCall(OpCodes.Call, Word.SetUInt256, null);
                     break;
                 default:
                     throw new NotImplementedException();
@@ -402,9 +409,10 @@ public class IlVirtualMachine : IVirtualMachine
             new(Instruction.JUMPDEST, GasCostOf.JumpDest, 0, 0, 0, true),
             new(Instruction.JUMP, GasCostOf.Mid, 0, 1, 0, true),
             new(Instruction.JUMPI, GasCostOf.High, 0, 2, 0, true),
-            new(Instruction.SUB, GasCostOf.VeryLow, 0, 2, 1, false)
+            new(Instruction.SUB, GasCostOf.VeryLow, 0, 2, 1),
+            new(Instruction.DUP1, GasCostOf.VeryLow, 0, 1, 2)
         }.ToDictionary(op => op.Instruction);
-
+    
     public readonly struct Operation
     {
         /// <summary>

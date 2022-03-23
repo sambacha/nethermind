@@ -134,4 +134,19 @@ public class IlVirtualMachineTests : VirtualMachineTestsBase
 
         Console.WriteLine(result.Error);
     }
+
+    [Test]
+    public void Dup()
+    {
+        byte[] code = Prepare.EvmCode
+            .PushData(1)
+            .Op(Instruction.DUP1)
+            .Op(Instruction.POP)
+            .Op(Instruction.POP)
+            .Done;
+
+        TestAllTracerWithOutput result = Execute(code);
+
+        Console.WriteLine(result.Error);
+    }
 }
