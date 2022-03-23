@@ -19,7 +19,6 @@ using System.Numerics;
 using Nethermind.Core;
 using Nethermind.Core.Extensions;
 using Nethermind.Evm.Tracing.GethStyle;
-using Nethermind.State;
 using Nethermind.Int256;
 using NUnit.Framework;
 

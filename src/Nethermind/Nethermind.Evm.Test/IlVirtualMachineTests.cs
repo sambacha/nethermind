@@ -172,15 +172,16 @@ public class IlVirtualMachineTests : VirtualMachineTestsBase
     [Test]
     public void Long_Loop()
     {
-        byte[] code = Prepare.EvmCode
-            .PushData(5)
+        byte[] repeat = {255, 255};
 
+        byte[] code = Prepare.EvmCode
+            .PushData(repeat)
             .Op(Instruction.JUMPDEST)   // counter
             .PushData(1)                // counter, 1
             .Op(Instruction.SWAP1)      // 1, counter
             .Op(Instruction.SUB)        // counter-1
             .Op(Instruction.DUP1)       // counter-1, counter-1
-            .PushData(2)                // counter-1, counter-1, 2
+            .PushData(1 + repeat.Length)                // counter-1, counter-1, 2
             .Op(Instruction.JUMPI)      // counter-1
             .Op(Instruction.POP)
             .Done;

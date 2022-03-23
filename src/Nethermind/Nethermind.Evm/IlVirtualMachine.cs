@@ -201,16 +201,25 @@ public class IlVirtualMachine : IVirtualMachine
                     pc += 1;
                     break;
                 case Instruction.PUSH2:
-                case Instruction.PUSH3:
-                case Instruction.PUSH4:
                     il.Load(current);
                     il.Emit(OpCodes.Initobj, typeof(Word));
                     il.Load(current);
-                    int push2 = BinaryPrimitives.ReadInt32LittleEndian(code.Slice(pc + 1).ToArray().Concat(new byte[4]).ToArray());
-                    il.Emit(OpCodes.Ldc_I4, BinaryPrimitives.ReverseEndianness(push2));
+
+                    if (pc + 2 >= code.Length)
+                        throw new NotImplementedException("Not handled yet!");
+
+                    if (!BitConverter.IsLittleEndian)
+                    {
+                        throw new NotImplementedException("Currently only little endian!");
+                    }
+
+                    short sh = BinaryPrimitives.ReadInt16LittleEndian(code.Slice(pc + 1));
+                    int pushed = sh << 16;
+
+                    il.Emit(OpCodes.Ldc_I4, pushed);
                     il.Emit(OpCodes.Stfld, Word.Int0Field);
                     il.StackPush(current);
-                    pc += 1 + op.Instruction - Instruction.PUSH1;
+                    pc += 2;
                     break;
                 case Instruction.DUP1:
                     il.Load(current);
@@ -421,8 +430,6 @@ public class IlVirtualMachine : IVirtualMachine
             new(Instruction.PC, GasCostOf.Base, 0, 0, 1),
             new(Instruction.PUSH1, GasCostOf.VeryLow, 1, 0, 1),
             new(Instruction.PUSH2, GasCostOf.VeryLow, 2, 0, 1),
-            new(Instruction.PUSH3, GasCostOf.VeryLow, 3, 0, 1),
-            new(Instruction.PUSH4, GasCostOf.VeryLow, 4, 0, 1),
             new(Instruction.JUMPDEST, GasCostOf.JumpDest, 0, 0, 0, true),
             new(Instruction.JUMP, GasCostOf.Mid, 0, 1, 0, true),
             new(Instruction.JUMPI, GasCostOf.High, 0, 2, 0, true),
