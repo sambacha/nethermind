@@ -216,10 +216,31 @@ public class IlVirtualMachine : IVirtualMachine
                     break;
                 case Instruction.DUP1:
                     il.Load(current);
-                    il.StackLoadPrevious(current, 1 + op.Instruction - Instruction.DUP1);
+                    il.StackLoadPrevious(current, 1 + op.Instruction - Instruction.DUP1);       // TODO: ready for other DUP_N with the substitution
                     il.Emit(OpCodes.Ldobj, typeof(Word));
                     il.Emit(OpCodes.Stobj, typeof(Word));
                     il.StackPush(current);
+                    break;
+                case Instruction.SWAP1:
+                    // copy to a helper variable the top item
+                    il.LoadAddress(uint256c); // reuse uint as a swap placeholder
+                    il.StackLoadPrevious(current, 1);
+                    il.Emit(OpCodes.Ldobj, typeof(Word));
+                    il.Emit(OpCodes.Stobj, typeof(Word));
+
+                    byte swapWith = 2 + op.Instruction - Instruction.SWAP1; // TODO: ready for other SWAP_N with the substitution
+
+                    // write to the top item
+                    il.StackLoadPrevious(current, 1);
+                    il.StackLoadPrevious(current, swapWith);
+                    il.Emit(OpCodes.Ldobj, typeof(Word));
+                    il.Emit(OpCodes.Stobj, typeof(Word)); // top item overwritten
+
+                    // write to the more nested one from local variable
+                    il.StackLoadPrevious(current, swapWith);
+                    il.LoadAddress(uint256c);
+                    il.Emit(OpCodes.Ldobj, typeof(Word));
+                    il.Emit(OpCodes.Stobj, typeof(Word));
                     break;
                 case Instruction.POP:
                     il.StackPop(current);
@@ -410,7 +431,8 @@ public class IlVirtualMachine : IVirtualMachine
             new(Instruction.JUMP, GasCostOf.Mid, 0, 1, 0, true),
             new(Instruction.JUMPI, GasCostOf.High, 0, 2, 0, true),
             new(Instruction.SUB, GasCostOf.VeryLow, 0, 2, 1),
-            new(Instruction.DUP1, GasCostOf.VeryLow, 0, 1, 2)
+            new(Instruction.DUP1, GasCostOf.VeryLow, 0, 1, 2),
+            new(Instruction.SWAP1, GasCostOf.VeryLow, 0, 2, 2)
         }.ToDictionary(op => op.Instruction);
     
     public readonly struct Operation

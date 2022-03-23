@@ -149,4 +149,37 @@ public class IlVirtualMachineTests : VirtualMachineTestsBase
 
         Console.WriteLine(result.Error);
     }
+    
+    [Test]
+    public void Swap()
+    {
+        byte[] code = Prepare.EvmCode
+            .PushData(2)
+            .PushData(1)
+            .Op(Instruction.SWAP1)
+            .Op(Instruction.SUB)
+            .Done;
+
+        TestAllTracerWithOutput result = Execute(code);
+
+        Console.WriteLine(result.Error);
+    }
+
+    //[Test]
+    //public void Long_Loop()
+    //{
+    //    byte[] code = Prepare.EvmCode
+    //        .PushData(1000_000)
+    //        .Op(Instruction.JUMPDEST)
+    //        .
+
+    //        .Op(Instruction.DUP1)
+    //        .Op(Instruction.POP)
+    //        .Op(Instruction.POP)
+    //        .Done;
+
+    //    TestAllTracerWithOutput result = Execute(code);
+
+    //    Console.WriteLine(result.Error);
+    //}
 }
