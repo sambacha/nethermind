@@ -166,12 +166,13 @@ public class IlVirtualMachine : IVirtualMachine
                     il.StackPush(current);
                     break;
                 case Instruction.PUSH1:
-                    il.CleanWord(current);
-                    il.Load(current);
-                    int value = (i + 1 >= code.Length) ? 0 : code[i + 1];
-                    il.LoadValue(value);
-                    il.Emit(OpCodes.Stfld, Word.Byte0Field);
-                    il.StackPush(current);
+                    il.Load(current);                           // load the next top pointer of the stack
+                    il.Emit(OpCodes.Initobj, typeof(Word));     // zero it
+                    il.Load(current);                           // load the next top pointer of the stack
+                    byte value = (byte)((i + 1 >= code.Length) ? 0 : code[i + 1]);
+                    il.Emit(OpCodes.Ldc_I4_S, value);           // load the byte value
+                    il.Emit(OpCodes.Stfld, Word.Byte0Field);    // set the field
+                    il.StackPush(current);                      // advance stack pointer
                     break;
                 case Instruction.POP:
                     il.StackPop(current);
