@@ -14,6 +14,9 @@
 //  You should have received a copy of the GNU Lesser General Public License
 //  along with the Nethermind. If not, see <http://www.gnu.org/licenses/>.
 
+using System;
+using System.Buffers.Binary;
+using System.Diagnostics;
 using System.Linq;
 using System.Numerics;
 using Nethermind.Core;
@@ -34,7 +37,36 @@ namespace Nethermind.Evm.Test
             TestAllTracerWithOutput receipt = Execute((byte)Instruction.STOP);
             Assert.AreEqual(GasCostOf.Transaction, receipt.GasSpent);
         }
-        
+
+        [Test]
+        [Explicit]
+        public void Long_Loop()
+        {
+            Stopwatch sw = Stopwatch.StartNew();
+
+            const int loopCount = 10_000_000;
+            byte[] repeat = new byte[4];
+            BinaryPrimitives.TryWriteInt32BigEndian(repeat, loopCount);
+
+            byte[] code = Prepare.EvmCode
+                .PushData(repeat)
+                .Op(Instruction.JUMPDEST)   // counter
+                .PushData(1)                // counter, 1
+                .Op(Instruction.SWAP1)      // 1, counter
+                .Op(Instruction.SUB)        // counter-1
+                .Op(Instruction.DUP1)       // counter-1, counter-1
+                .PushData(1 + repeat.Length)                // counter-1, counter-1, 2
+                .Op(Instruction.JUMPI)      // counter-1
+                .Op(Instruction.POP)
+                .Done;
+
+            TestAllTracerWithOutput result = Execute(code);
+
+            Console.WriteLine($"Execution of {loopCount} took {sw.Elapsed} taking {sw.ElapsedMilliseconds * 1_000_000 / loopCount}ms per million spins");
+
+            Console.WriteLine(result.Error);
+        }
+
         [Test]
         public void Trace()
         {

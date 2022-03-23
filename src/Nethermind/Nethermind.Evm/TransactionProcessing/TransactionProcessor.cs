@@ -195,24 +195,6 @@ namespace Nethermind.Evm.TransactionProcessing
             long intrinsicGas = IntrinsicGasCalculator.Calculate(transaction, spec);
             if (_logger.IsTrace) _logger.Trace($"Intrinsic gas calculated for {transaction.Hash}: " + intrinsicGas);
 
-            if (notSystemTransaction)
-            {
-                if (gasLimit < intrinsicGas)
-                {
-                    TraceLogInvalidTx(transaction, $"GAS_LIMIT_BELOW_INTRINSIC_GAS {gasLimit} < {intrinsicGas}");
-                    QuickFail(transaction, block, txTracer, eip658NotEnabled, "gas limit below intrinsic gas");
-                    return;
-                }
-
-                if (!noValidation && gasLimit > block.GasLimit - block.GasUsed)
-                {
-                    TraceLogInvalidTx(transaction,
-                        $"BLOCK_GAS_LIMIT_EXCEEDED {gasLimit} > {block.GasLimit} - {block.GasUsed}");
-                    QuickFail(transaction, block, txTracer, eip658NotEnabled, "block gas limit exceeded");
-                    return;
-                }
-            }
-
             if (!_stateProvider.AccountExists(caller))
             {
                 // hacky fix for the potential recovery issue

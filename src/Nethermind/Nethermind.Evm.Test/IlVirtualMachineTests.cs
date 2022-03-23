@@ -16,6 +16,8 @@
 // 
 
 using System;
+using System.Buffers.Binary;
+using System.Diagnostics;
 using Nethermind.Logging;
 using NUnit.Framework;
 
@@ -170,9 +172,14 @@ public class IlVirtualMachineTests : VirtualMachineTestsBase
     }
 
     [Test]
+    [Explicit]
     public void Long_Loop()
     {
-        byte[] repeat = {255, 255};
+        Stopwatch sw = Stopwatch.StartNew();
+
+        const int loopCount = 1000_000_000;
+        byte[] repeat = new byte[4];
+        BinaryPrimitives.TryWriteInt32BigEndian(repeat, loopCount);
 
         byte[] code = Prepare.EvmCode
             .PushData(repeat)
@@ -187,6 +194,8 @@ public class IlVirtualMachineTests : VirtualMachineTestsBase
             .Done;
 
         TestAllTracerWithOutput result = Execute(code);
+
+        Console.WriteLine($"Execution of {loopCount} took {sw.Elapsed} taking {sw.ElapsedMilliseconds * 1_000_000 / loopCount}ms per million spins");
 
         Console.WriteLine(result.Error);
     }
