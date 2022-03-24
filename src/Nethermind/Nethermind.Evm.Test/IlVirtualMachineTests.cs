@@ -63,7 +63,7 @@ public class IlVirtualMachineTests : VirtualMachineTestsBase
 
         TestAllTracerWithOutput result = Execute(code);
 
-        Console.WriteLine(result.Error);
+        Assert.AreEqual(result.Error, EvmExceptionType.InvalidJumpDestination.ToString());
     }
 
     [Test]
@@ -105,7 +105,7 @@ public class IlVirtualMachineTests : VirtualMachineTestsBase
 
         TestAllTracerWithOutput result = Execute(code);
 
-        Console.WriteLine(result.Error);
+        Assert.AreEqual(result.Error, EvmExceptionType.InvalidJumpDestination.ToString());
     }
 
     [Test]
@@ -169,6 +169,21 @@ public class IlVirtualMachineTests : VirtualMachineTestsBase
         TestAllTracerWithOutput result = Execute(code);
 
         Console.WriteLine(result.Error);
+    }
+
+    [Test]
+    public void OutOfGas()
+    {
+        // an infinite loop
+        byte[] code = Prepare.EvmCode
+            .Op(Instruction.JUMPDEST)
+            .PushData(0)
+            .Op(Instruction.JUMP)
+            .Done;
+
+        TestAllTracerWithOutput result = Execute(BlockNumber, 1, code);
+
+        Assert.AreEqual(result.Error, EvmExceptionType.OutOfGas.ToString());
     }
 
     [Test]

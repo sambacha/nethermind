@@ -128,7 +128,7 @@ public class IlVirtualMachine : IVirtualMachine
 
         // TODO: stack invariants, gasCost application
 
-        DynamicMethod method = new("JIT_" + state.Env.CodeSource, typeof(EvmExceptionType), Type.EmptyTypes, typeof(IlVirtualMachine).Assembly.Modules.First(), true)
+        DynamicMethod method = new("JIT_" + state.Env.CodeSource, typeof(EvmExceptionType), new []{typeof(long)}, typeof(IlVirtualMachine).Assembly.Modules.First(), true)
         {
             InitLocals = false
         };
@@ -140,6 +140,8 @@ public class IlVirtualMachine : IVirtualMachine
         LocalBuilder uint256A = il.DeclareLocal(typeof(UInt256));
         LocalBuilder uint256B = il.DeclareLocal(typeof(UInt256));
         LocalBuilder uint256C = il.DeclareLocal(typeof(UInt256));
+
+        LocalBuilder gasAvailable = il.DeclareLocal(typeof(long));
 
         // TODO: stack check for head
         LocalBuilder stack = il.DeclareLocal(typeof(Word*));
@@ -163,6 +165,11 @@ public class IlVirtualMachine : IVirtualMachine
         il.Load(stack);
         il.Store(current); // copy to the current
 
+        // gas
+        il.Emit(OpCodes.Ldarg_0);
+        il.Store(gasAvailable);
+        Label outOfGas = il.DefineLabel();
+
         Label ret = il.DefineLabel(); // the label just before return
         Label invalidAddress = il.DefineLabel(); // invalid jump address
         Label jumpTable = il.DefineLabel(); // jump table
@@ -172,6 +179,21 @@ public class IlVirtualMachine : IVirtualMachine
         for (int pc = 0; pc < code.Length; pc++)
         {
             Operation op = _operations[(Instruction)code[pc]];
+
+            if (gasCost.TryGetValue(pc, out long required))
+            {
+                // check required > available
+                il.LoadValue(required);
+                il.Load(gasAvailable);
+                il.Emit(OpCodes.Cgt);
+                il.Emit(OpCodes.Brtrue, outOfGas); // jump to out of gas
+
+                // gasAvailable = gasAvailable - required
+                il.Load(gasAvailable);
+                il.LoadValue(required);
+                il.Emit(OpCodes.Sub);
+                il.Store(gasAvailable);
+            }
 
             switch (op.Instruction)
             {
@@ -386,6 +408,11 @@ public class IlVirtualMachine : IVirtualMachine
             il.Emit(OpCodes.Br, invalidAddress);
         }
 
+        // out of gas
+        il.MarkLabel(outOfGas);
+        il.LoadValue((int)EvmExceptionType.OutOfGas);
+        il.Emit(OpCodes.Br, ret);
+
         // invalid address return
         il.MarkLabel(invalidAddress);
         il.LoadValue((int)EvmExceptionType.InvalidJumpDestination);
@@ -395,9 +422,9 @@ public class IlVirtualMachine : IVirtualMachine
         il.MarkLabel(ret);
         il.Emit(OpCodes.Ret);
 
-        Func<EvmExceptionType> del = method.CreateDelegate<Func<EvmExceptionType>>();
+        Func<long, EvmExceptionType> del = method.CreateDelegate<Func<long,EvmExceptionType>>();
 
-        return new TransactionSubstate(del(), true);
+        return new TransactionSubstate(del(state.GasAvailable), true);
     }
 
     public void DisableSimdInstructions()
@@ -411,18 +438,29 @@ public class IlVirtualMachine : IVirtualMachine
         int costStart = 0;
         long costCurrent = 0;
 
-        for (int i = 0; i < code.Length; i++)
+        for (int pc = 0; pc < code.Length; pc++)
         {
-            Operation op = _operations[(Instruction)code[i]];
-            if (op.GasComputationPoint)
+            Operation op = _operations[(Instruction)code[pc]];
+            switch (op.Instruction)
             {
-                costs[costStart] = costCurrent;
-                costStart = i;
-                costCurrent = 0;
+                case Instruction.JUMPDEST:
+                    costs[costStart] = costCurrent; // remember the current chain of opcodes
+                    costStart = pc;
+                    costCurrent = op.GasCost;
+                    break;
+                case Instruction.JUMPI:
+                case Instruction.JUMP:
+                    costCurrent += op.GasCost;
+                    costs[costStart] = costCurrent; // remember the current chain of opcodes
+                    costStart = pc + 1;             // start with the next again
+                    costCurrent = 0;
+                    break;
+                default:
+                    costCurrent += op.GasCost;
+                    break;
             }
 
-            costCurrent += op.GasCost;
-            i += op.AdditionalBytes;
+            pc += op.AdditionalBytes;
         }
 
         if (costCurrent > 0)
@@ -441,9 +479,9 @@ public class IlVirtualMachine : IVirtualMachine
             new(Instruction.PUSH1, GasCostOf.VeryLow, 1, 0, 1),
             new(Instruction.PUSH2, GasCostOf.VeryLow, 2, 0, 1),
             new(Instruction.PUSH4, GasCostOf.VeryLow, 4, 0, 1),
-            new(Instruction.JUMPDEST, GasCostOf.JumpDest, 0, 0, 0, true),
-            new(Instruction.JUMP, GasCostOf.Mid, 0, 1, 0, true),
-            new(Instruction.JUMPI, GasCostOf.High, 0, 2, 0, true),
+            new(Instruction.JUMPDEST, GasCostOf.JumpDest, 0, 0, 0),
+            new(Instruction.JUMP, GasCostOf.Mid, 0, 1, 0),
+            new(Instruction.JUMPI, GasCostOf.High, 0, 2, 0),
             new(Instruction.SUB, GasCostOf.VeryLow, 0, 2, 1),
             new(Instruction.DUP1, GasCostOf.VeryLow, 0, 1, 2),
             new(Instruction.SWAP1, GasCostOf.VeryLow, 0, 2, 2)
@@ -477,21 +515,15 @@ public class IlVirtualMachine : IVirtualMachine
         public byte StackBehaviorPush { get; }
 
         /// <summary>
-        /// Marks the point important from the gas computation point
-        /// </summary>
-        public bool GasComputationPoint { get; }
-
-        /// <summary>
         /// Creates the new operation.
         /// </summary>
-        public Operation(Instruction instruction, long gasCost, byte additionalBytes, byte stackBehaviorPop, byte stackBehaviorPush, bool gasComputationPoint = false)
+        public Operation(Instruction instruction, long gasCost, byte additionalBytes, byte stackBehaviorPop, byte stackBehaviorPush)
         {
             Instruction = instruction;
             GasCost = gasCost;
             AdditionalBytes = additionalBytes;
             StackBehaviorPop = stackBehaviorPop;
             StackBehaviorPush = stackBehaviorPush;
-            GasComputationPoint = gasComputationPoint;
         }
     }
 }
@@ -643,6 +675,11 @@ static class EmitExtensions
                 }
                 break;
         }
+    }
+
+    public static void LoadValue(this ILGenerator il, long value)
+    {
+        il.Emit(OpCodes.Ldc_I8, value);
     }
 
     public static void LoadValue(this ILGenerator il, int value)
