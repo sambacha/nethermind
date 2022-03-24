@@ -60,7 +60,7 @@ namespace Nethermind.Evm.Test
                 .Op(Instruction.POP)
                 .Done;
 
-            TestAllTracerWithOutput result = Execute(code);
+            TestAllTracerWithOutput result = Execute(BlockNumber, long.MaxValue, code);
 
             Console.WriteLine($"Execution of {loopCount} took {sw.Elapsed} taking {sw.ElapsedMilliseconds * 1_000_000 / loopCount}ms per million spins");
 

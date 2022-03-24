@@ -28,23 +28,10 @@ public class IlVirtualMachineTests : VirtualMachineTestsBase
     protected override IVirtualMachine BuildVirtualMachine(IBlockhashProvider blockhashProvider, ILogManager logManager) => new IlVirtualMachine();
 
     [Test]
-    public void Test1()
+    public void PC_POP()
     {
         byte[] code = Prepare.EvmCode
             .Op(Instruction.PC)
-            .Op(Instruction.POP)
-            .Done;
-
-        TestAllTracerWithOutput result = Execute(code);
-
-        Console.WriteLine(result.Error);
-    }
-
-    [Test]
-    public void Test2()
-    {
-        byte[] code = Prepare.EvmCode
-            .PushData(1)
             .Op(Instruction.POP)
             .Done;
 
@@ -208,7 +195,7 @@ public class IlVirtualMachineTests : VirtualMachineTestsBase
             .Op(Instruction.POP)
             .Done;
 
-        TestAllTracerWithOutput result = Execute(code);
+        TestAllTracerWithOutput result = Execute(BlockNumber, long.MaxValue, code);
 
         Console.WriteLine($"Execution of {loopCount} took {sw.Elapsed} taking {sw.ElapsedMilliseconds * 1_000_000 / loopCount}ms per million spins");
 
