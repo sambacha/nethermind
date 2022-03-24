@@ -137,7 +137,6 @@ public class IlVirtualMachine : IVirtualMachine
 
         LocalBuilder jmpDestination = il.DeclareLocal(Word.Int0Field.FieldType);
         LocalBuilder consumeJumpCondition = il.DeclareLocal(typeof(int));
-        LocalBuilder word = il.DeclareLocal(typeof(Word));
         LocalBuilder uint256A = il.DeclareLocal(typeof(UInt256));
         LocalBuilder uint256B = il.DeclareLocal(typeof(UInt256));
         LocalBuilder uint256C = il.DeclareLocal(typeof(UInt256));
@@ -241,7 +240,7 @@ public class IlVirtualMachine : IVirtualMachine
                     break;
                 case Instruction.SWAP1:
                     // copy to a helper variable the top item
-                    il.LoadAddress(word); // reuse uint as a swap placeholder
+                    il.LoadAddress(uint256C); // reuse uint as a swap placeholder
                     il.StackLoadPrevious(current, 1);
                     il.Emit(OpCodes.Ldobj, typeof(Word));
                     il.Emit(OpCodes.Stobj, typeof(Word));
@@ -256,7 +255,7 @@ public class IlVirtualMachine : IVirtualMachine
 
                     // write to the more nested one from local variable
                     il.StackLoadPrevious(current, swapWith);
-                    il.LoadAddress(word);
+                    il.LoadAddress(uint256C);
                     il.Emit(OpCodes.Ldobj, typeof(Word));
                     il.Emit(OpCodes.Stobj, typeof(Word));
                     break;
