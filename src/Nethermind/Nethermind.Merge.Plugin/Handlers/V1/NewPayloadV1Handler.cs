@@ -185,11 +185,14 @@ namespace Nethermind.Merge.Plugin.Handlers.V1
 
             if (_beaconPivot.BeaconPivotExists())
             {
-                if (parentHeader.TotalDifficulty == 0 && _beaconSyncStrategy.IsBeaconSyncHeadersFinished())
+                if (_beaconSyncStrategy.IsBeaconSyncHeadersFinished())
+                {
+                    return NewPayloadV1Result.Syncing;
+                }
+                
+                if (parentHeader.TotalDifficulty == 0)
                 {
                     parentHeader.TotalDifficulty = _blockTree.BackFillTotalDifficulty(_beaconPivot.PivotNumber, block.Number - 1);
-                } else {
-                    return NewPayloadV1Result.Syncing;
                 }
                 
                 // TODO: beaconsync add TDD and validation checks
