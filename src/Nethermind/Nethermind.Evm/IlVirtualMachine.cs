@@ -18,14 +18,20 @@
 using System;
 using System.Buffers.Binary;
 using System.Collections.Generic;
+using System.Diagnostics;
+using System.IO;
 using System.Linq;
 using System.Reflection;
 using System.Reflection.Emit;
 using System.Runtime.InteropServices;
+using Iced.Intel;
+using Microsoft.Diagnostics.Runtime;
+using Microsoft.Diagnostics.Runtime.Implementation;
 using Nethermind.Core.Extensions;
 using Nethermind.Evm.Tracing;
 using Nethermind.Int256;
 using Nethermind.State;
+using Label = System.Reflection.Emit.Label;
 
 namespace Nethermind.Evm;
 
@@ -128,7 +134,9 @@ public class IlVirtualMachine : IVirtualMachine
 
         // TODO: stack invariants, gasCost application
 
-        DynamicMethod method = new("JIT_" + state.Env.CodeSource, typeof(EvmExceptionType), new []{typeof(long)}, typeof(IlVirtualMachine).Assembly.Modules.First(), true)
+        string name = "ILVM_" + Guid.NewGuid().ToString();
+
+        DynamicMethod method = new(name, typeof(EvmExceptionType), new[] { typeof(long) }, typeof(IlVirtualMachine).Assembly.Modules.First(), true)
         {
             InitLocals = false
         };
@@ -422,9 +430,56 @@ public class IlVirtualMachine : IVirtualMachine
         il.MarkLabel(ret);
         il.Emit(OpCodes.Ret);
 
-        Func<long, EvmExceptionType> del = method.CreateDelegate<Func<long,EvmExceptionType>>();
+        Func<long, EvmExceptionType> del = method.CreateDelegate<Func<long, EvmExceptionType>>();
 
-        return new TransactionSubstate(del(state.GasAvailable), true);
+        EvmExceptionType result = del(state.GasAvailable);
+
+        using DataTarget dt = DataTarget.CreateSnapshotAndAttach(Process.GetCurrentProcess().Id);
+        using ClrRuntime runtime = dt.ClrVersions.Single().CreateRuntime();
+        ClrHeap heap = runtime.Heap;
+
+        ClrmdMethod clrMethod = heap.GetProxies("System.Reflection.Emit.DynamicMethod")
+            .Select(proxy =>
+            {
+                ulong mdToken = (ulong)proxy.m_methodHandle.m_value.m_handle;
+                return runtime.GetMethodByHandle(mdToken);
+            }).Single(m => m.Name == name) as ClrmdMethod;
+
+
+
+        TextWriter writer = Console.Out;
+
+        ulong address = clrMethod.NativeCode;
+        const int length = 2048;
+        
+        writer.WriteLine($"ASM-------------");
+
+        unsafe
+        {
+            byte[] asm = new Span<byte>(new UIntPtr(address).ToPointer(), length).ToArray();
+
+            Decoder decoder = Decoder.Create(IntPtr.Size * 8, asm);
+
+            IntelFormatter formatter = new();
+            StringOutput? output = new();
+
+            decoder.IP = address;
+            while (decoder.IP < (address + length))
+            {
+                decoder.Decode(out Iced.Intel.Instruction instruction);
+
+                formatter.Format(instruction, output);
+
+                writer.Write((instruction.IP - address).ToString("x4"));
+                writer.Write(": ");
+                writer.WriteLine(output.ToStringAndReset());
+            }
+        }
+
+        writer.WriteLine("ASM END-------------");
+        writer.WriteLine();
+
+        return new TransactionSubstate(result, true);
     }
 
     public void DisableSimdInstructions()

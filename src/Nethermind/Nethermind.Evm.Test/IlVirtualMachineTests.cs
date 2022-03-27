@@ -179,7 +179,7 @@ public class IlVirtualMachineTests : VirtualMachineTestsBase
     {
         Stopwatch sw = Stopwatch.StartNew();
 
-        const int loopCount = 1000_000_000;
+        const int loopCount = 100_000_000;
         byte[] repeat = new byte[4];
         BinaryPrimitives.TryWriteInt32BigEndian(repeat, loopCount);
 
