@@ -93,8 +93,10 @@ namespace Nethermind.Evm
         private int NormalUserCount = 0;
 
         public Dictionary<UInt256, TaintInfo> taintStorage = new Dictionary<UInt256, TaintInfo>();
-        public SortedSet<int> VisitedEdgeSet { get; set; } = new SortedSet<int>();
-        public SortedSet<int> VisitedInstrs { get; set; } = new SortedSet<int>();
+        // Store edge set separately for deploy code and runtime code.
+        public SortedSet<int> VisitedDeployEdges { get; set; } = new SortedSet<int>();
+        public SortedSet<int> VisitedRuntimeEdges { get; set; } = new SortedSet<int>();
+        public SortedSet<int> VisitedRuntimeInstrs { get; set; } = new SortedSet<int>();
         // PC, Op, Oprnd1, Oprnd2
         public List<(int, string, BigInteger, BigInteger)> CmpList { get; set; } = new List<(int, string, BigInteger, BigInteger)>();
         public Dictionary<UInt256, int> DefPCMap { get; set; } = new Dictionary<UInt256, int>();
@@ -234,12 +236,22 @@ namespace Nethermind.Evm
         private void LogVisitedEdge (int srcPC, int dstPC)
         {
             int edgeHash = (srcPC << 16) ^ dstPC;
-            VisitedEdgeSet.Add(edgeHash);
+            if (IsDeployingTarget)
+            {
+                VisitedDeployEdges.Add(edgeHash);
+            }
+            else
+            {
+                VisitedRuntimeEdges.Add(edgeHash);
+            }
         }
 
         private void LogVisitedInstr (int pc)
         {
-            VisitedInstrs.Add(pc);
+            if (!IsDeployingTarget)
+            {
+                VisitedRuntimeInstrs.Add(pc);
+            }
         }
 
         private void LogException (EvmState currentState, CallResult callResult)
